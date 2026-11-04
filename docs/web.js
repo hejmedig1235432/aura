@@ -117,7 +117,9 @@
     }
     const text = await r.text();
     if (!r.ok) throw `Spotify ${r.status}: ${text}`;
-    const v = text.trim() ? JSON.parse(text) : null;
+    // some player commands answer with plain text (not JSON); keep it as it is then
+    let v = null;
+    if (text.trim()) { try { v = JSON.parse(text); } catch { v = text; } }
     if (fresh) cache.set(key, { at: Date.now(), v });
     return v;
   }
