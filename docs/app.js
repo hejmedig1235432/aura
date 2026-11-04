@@ -1697,7 +1697,8 @@ function showUpdateBar(r) {
   bar.id = "update-bar";
   bar.innerHTML = `<span>✨ <b>Aura ${esc(r.version)}</b> is available</span>
     <button class="pill accent" id="update-go">Update</button><button class="ic" id="update-x">${icon("x")}</button>`;
-  $("app").append(bar);
+  // on the page itself (not inside the app view), so it also shows on the sign-in screen
+  document.body.append(bar);
   $("update-x").onclick = () => bar.remove();
   $("update-go").onclick = () => installUpdate($("update-go"));
 }
