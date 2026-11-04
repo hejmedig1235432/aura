@@ -9,7 +9,10 @@ param(
   [Parameter(Mandatory)][string]$Version,
   [string]$Notes = "Bug fixes and improvements"
 )
-$ErrorActionPreference = "Stop"
+# Not "Stop": Windows PowerShell treats cargo's normal stderr output as errors. Each step
+# checks its exit code instead.
+$ErrorActionPreference = "Continue"
+function Check($what) { if ($LASTEXITCODE) { throw "$what failed (exit $LASTEXITCODE)" } }
 $repo = "hejmedig1235432/aura"
 $root = Split-Path $PSScriptRoot
 $tauri = Join-Path $root "src-tauri"
@@ -29,7 +32,7 @@ $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
 $env:CARGO_TARGET_DIR = Join-Path $tauri "target-installer"
 $env:CI = "true"
 Push-Location $tauri
-try { cargo tauri build --bundles nsis; if ($LASTEXITCODE) { throw "build failed" } } finally { Pop-Location }
+try { cargo tauri build --bundles nsis 2>&1 | ForEach-Object { "$_" }; Check "build" } finally { Pop-Location }
 
 $bundle = Join-Path $env:CARGO_TARGET_DIR "release\bundle\nsis"
 $setupName = "Aura_${Version}_x64-setup.exe"
@@ -52,9 +55,10 @@ $latestPath = Join-Path $bundle "latest.json"
 Push-Location $root
 try {
   git add -A
-  git commit -m "Release v$Version" | Out-Null
-  git push origin main
-  & $gh release create "v$Version" $setup "$setup.sig" $latestPath --repo $repo --title "Aura $Version" --notes $Notes
+  git diff --cached --quiet; if ($LASTEXITCODE) { git commit -q -m "Release v$Version" }
+  git push -q origin main 2>&1 | ForEach-Object { "$_" }; Check "git push"
+  & $gh release create "v$Version" $setup "$setup.sig" $latestPath --repo $repo --title "Aura $Version" --notes $Notes 2>&1 | ForEach-Object { "$_" }
+  Check "gh release create"
 } finally { Pop-Location }
 
 Copy-Item $setup (Join-Path $env:USERPROFILE "Downloads\Aura-Setup.exe") -Force
