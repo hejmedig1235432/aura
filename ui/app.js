@@ -433,7 +433,7 @@ function markEdgeBad(uri) {
 async function pickDeviceFor(uri) {
   if (!S.edgePlayer || !uri) return;
   const list = await invoke("devices").catch(() => []);
-  const aura = list.find((d) => d.name === "Aura");
+  const aura = ownDevice(list);
   const app = list.find((d) => d.name !== "Aura");
   const active = list.find((d) => d.is_active);
   if (edgeBad.has(uri)) {
@@ -468,7 +468,7 @@ async function withDevice(action) {
     } else if (!isNoDevice(e)) { playbackError(e); return; }
   }
   // Prefer Aura's own player; only fall back to the Spotify app when it isn't available.
-  const own = edgeHandedOff ? null : web.ready ? web.deviceId : (await invoke("devices").catch(() => [])).find((d) => d.name === "Aura")?.id;
+  const own = edgeHandedOff ? null : web.ready ? web.deviceId : ownDevice(await invoke("devices").catch(() => []))?.id;
   if (own) {
     await invoke("transfer", { deviceId: own }).catch(() => {});
     await new Promise((r) => setTimeout(r, 600));
@@ -479,7 +479,7 @@ async function withDevice(action) {
   for (let i = 0; i < 20; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     const list = await invoke("devices").catch(() => []);
-    const dev = list.find((d) => d.name !== "Aura") ?? list[0];
+    const dev = list.find((d) => d.name !== "Aura") ?? ownDevice(list);
     if (!dev) continue;
     await invoke("transfer", { deviceId: dev.id }).catch(() => {});
     await new Promise((r) => setTimeout(r, 800));
@@ -654,9 +654,12 @@ $("btn-devices").onclick = async (e) => {
   const pop = $("devices");
   if (!pop.classList.toggle("hidden")) {
     pop.innerHTML = `<h4>CONNECT TO A DEVICE</h4><div class="dev"><small>Loading…</small></div>`;
-    const list = (await invoke("devices").catch(() => [])).filter((d) => S.webPlayerBeta || d.name !== "Aura");
+    const all = await invoke("devices").catch(() => []);
+    const mine = ownDevice(all);
+    // only the live Aura player; older ones linger in Spotify's list for a while after restarts
+    const list = all.filter((d) => d.name !== "Aura" || d === mine);
     pop.innerHTML = `<h4>CONNECT TO A DEVICE</h4>` + (list.length
-      ? list.map((d) => `<div class="dev ${d.is_active ? "active" : ""}" data-id="${esc(d.id)}">${esc(d.name)}<small>${esc(d._type ?? d.type ?? "")}</small></div>`).join("")
+      ? list.map((d) => `<div class="dev ${d.is_active ? "active" : ""}" data-id="${esc(d.id)}">${esc(d === mine ? "Aura (this PC)" : d.name)}<small>${esc(d._type ?? d.type ?? "")}</small></div>`).join("")
       : `<div class="dev"><small>No devices. Open Spotify on your PC or phone.</small></div>`);
     pop.querySelectorAll("[data-id]").forEach((d) => (d.onclick = () =>
       call("transfer", { deviceId: d.dataset.id }).then(() => { pop.classList.add("hidden"); setTimeout(refresh, 600); }).catch(() => {})));
@@ -1511,7 +1514,7 @@ listen("edge-player", async ({ payload }) => {
       edgeRetry = { uri, at: Date.now() };
       reportLog(`retrying ${uri} on the built-in player`);
       await new Promise((r) => setTimeout(r, 3000));
-      const aura = (await invoke("devices").catch(() => [])).find((d) => d.name === "Aura");
+      const aura = ownDevice(await invoke("devices").catch(() => []));
       if (aura) { await invoke("transfer", { deviceId: aura.id, play: false }).catch(() => {}); }
       await invoke("play_uris", { uris, start: uri }).catch(() => {});
       return;
@@ -1679,3 +1682,19 @@ function showUpdateBar(r) {
 
 $("check-updates").onclick = () => checkForUpdates(true);
 setTimeout(() => checkForUpdates(false), 8000);
+
+/* ================= the live Aura device ================= */
+// Each time the Edge player starts it gets a new Spotify device id, and Spotify keeps old
+// "Aura" entries listed for a while. The player reports its id when ready; use only that one.
+
+let edgeDeviceId = null;
+listen("edge-player", ({ payload }) => {
+  const m = String(payload).match(/^ready (\w+)/);
+  if (m) edgeDeviceId = m[1];
+});
+
+/** Aura's own, live player in a device list (null if it isn't running). */
+function ownDevice(list) {
+  if (edgeDeviceId) return list.find((d) => d.id === edgeDeviceId) ?? null;
+  return null; // not started yet: don't guess, older "Aura" entries are dead
+}
