@@ -14,6 +14,7 @@ pub struct Pending(pub tokio::sync::Mutex<Option<Update>>);
 pub async fn check_update(app: AppHandle) -> Result<Value, String> {
     let current = app.package_info().version.to_string();
     let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
+    log::info!("aura: update check: running {current}, latest {}", update.as_ref().map(|u| u.version.as_str()).unwrap_or("(same)"));
     let found = update.as_ref().map(|u| json!({ "version": u.version, "notes": u.body, "current": current }));
     *app.state::<Pending>().0.lock().await = update;
     Ok(found.unwrap_or(json!({ "version": null, "current": current })))
