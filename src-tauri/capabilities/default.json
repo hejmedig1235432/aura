@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "windows": ["main", "widget", "overlay"],
+  "windows": ["main", "widget", "overlay", "desk"],
   "permissions": [
     "core:default",
     "core:window:allow-minimize",

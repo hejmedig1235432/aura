@@ -99,7 +99,10 @@ function set(key, value) {
   applySettings();
   if (key === "material") invoke("set_material", { kind: value }).catch(() => {});
   if (key === "autostart") invoke("set_autostart", { on: value }).catch((e) => toast(`Startup setting failed: ${e}`));
-  if (key === "songWallpaper") value ? updateWallpaper(true) : invoke("restore_wallpaper").catch((e) => toast(`Wallpaper: ${e}`));
+  if (key === "songWallpaper") {
+    value ? updateWallpaper(true) : invoke("restore_wallpaper").catch((e) => toast(`Wallpaper: ${e}`));
+    invoke("toggle_desk", { show: value }).then(() => value && setTimeout(sendWidget, 800)).catch((e) => toast(`Desktop layer: ${e}`));
+  }
 }
 
 function buildSettings() {
@@ -1450,7 +1453,7 @@ setTimeout(() => { if (!$("app").classList.contains("hidden")) offerResume(); },
 const { emit, listen } = window.__TAURI__.event;
 S.widget ??= false;
 function sendWidget() {
-  if (!S.widget) return;
+  if (!S.widget && !S.songWallpaper) return; // the widget and the desktop layer both listen
   const line = lastLine >= 0 ? lyricLines[lastLine]?.text : "";
   emit("aura-np", {
     title: $("pb-title").textContent, artist: $("pb-artist").textContent, cover: current.cover,
@@ -1473,6 +1476,7 @@ listen("aura-widget-action", (e) => {
   else if (a === "close") setWidget(false);
 });
 if (S.widget) setTimeout(() => setWidget(true), 3000);
+if (S.songWallpaper) setTimeout(() => invoke("toggle_desk", { show: true }).catch(() => {}), 3000);
 
 // keep the widget in step with lyrics and play/pause
 let widgetLine = -2, widgetPlaying = null;
@@ -1480,7 +1484,7 @@ const tickExtrasBase = tickExtras;
 tickExtras = (pos) => {
   tickExtrasBase(pos);
   karaokeTick(pos + (S.lyricsOffset ?? 400));
-  if (S.widget && (lastLine !== widgetLine || current.playing !== widgetPlaying)) {
+  if ((S.widget || S.songWallpaper) && (lastLine !== widgetLine || current.playing !== widgetPlaying)) {
     widgetLine = lastLine; widgetPlaying = current.playing;
     sendWidget();
   }

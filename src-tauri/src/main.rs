@@ -21,6 +21,7 @@ mod discord;
 mod edge;
 mod hotkeys;
 mod updates;
+mod desk;
 mod wallpaper;
 mod lyrics_index;
 mod plays;
@@ -831,7 +832,8 @@ fn main() {
             index_lyrics, lyrics_search, translate, play_history, toggle_widget,
             artist, album, play_context, hotkeys::show_overlay,
             updates::check_update, updates::install_update,
-            wallpaper::set_song_wallpaper, wallpaper::restore_wallpaper
+            wallpaper::set_song_wallpaper, wallpaper::restore_wallpaper,
+            desk::toggle_desk, desk::desk_hot
         ])
         .build(tauri::generate_context!())
         .expect("error while building Aura")
