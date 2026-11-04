@@ -58,4 +58,4 @@ try {
 } finally { Pop-Location }
 
 Copy-Item $setup (Join-Path $env:USERPROFILE "Downloads\Aura-Setup.exe") -Force
-"Published Aura $Version: https://github.com/$repo/releases/tag/v$Version"
+"Published Aura ${Version}: https://github.com/$repo/releases/tag/v$Version"
