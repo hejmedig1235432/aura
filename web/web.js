@@ -8,7 +8,9 @@
 (() => {
   const CLIENT_ID = "b7f26bd2252d4c4183edb7b330716cab";
   const API = "https://api.spotify.com/v1";
-  const REDIRECT = location.origin + location.pathname;
+  // Must match a Redirect URI in the Spotify dashboard exactly, so always send the folder
+  // address (https://.../aura/), even if the page was opened as .../aura/index.html.
+  const REDIRECT = location.origin + location.pathname.replace(/index\.html$/, "").replace(/([^/])$/, "$1/");
   const SCOPES = [
     "streaming", "user-read-email", "user-read-private", "user-read-playback-state", "user-modify-playback-state",
     "user-read-currently-playing", "user-read-recently-played", "user-top-read", "user-library-read",
