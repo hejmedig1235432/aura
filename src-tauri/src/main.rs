@@ -196,7 +196,11 @@ async fn restore_session(app: State<'_, App>) -> Res {
             _ => return Ok(json!(false)),
         }
     }
-    Ok(json!(get(&app, "/me", &[]).await.is_ok()))
+    // "too many requests" doesn't mean signed out: let you in, Aura waits out the limit
+    Ok(json!(match get(&app, "/me", &[]).await {
+        Ok(_) => true,
+        Err(e) => e.starts_with("RATE_LIMITED"),
+    }))
 }
 
 #[tauri::command]
@@ -210,7 +214,11 @@ async fn login(app: State<'_, App>) -> Res {
         let code = sp.parse_response_code(&redirected).ok_or("no code in callback")?;
         sp.request_token(&code).await.map_err(err)?;
     }
-    get(&app, "/me", &[]).await
+    match get(&app, "/me", &[]).await {
+        // signed in fine; Spotify is only rate-limiting, so don't fail the sign-in
+        Err(e) if e.starts_with("RATE_LIMITED") => Ok(json!({})),
+        other => other,
+    }
 }
 
 
