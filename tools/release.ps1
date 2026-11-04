@@ -56,8 +56,15 @@ Push-Location $root
 try {
   git add -A
   git diff --cached --quiet; if ($LASTEXITCODE) { git commit -q -m "Release v$Version" }
-  git push -q origin main 2>&1 | ForEach-Object { "$_" }; Check "git push"
-  & $gh release create "v$Version" $setup "$setup.sig" $latestPath --repo $repo --title "Aura $Version" --notes $Notes 2>&1 | ForEach-Object { "$_" }
+  # GitHub sometimes answers 502 for a moment; retry these steps a few times
+  foreach ($try in 1..3) { git push -q origin main 2>&1 | ForEach-Object { "$_" }; if (-not $LASTEXITCODE) { break }; Start-Sleep 5 }
+  Check "git push"
+  foreach ($try in 1..3) {
+    & $gh release view "v$Version" --repo $repo 2>$null | Out-Null
+    if (-not $LASTEXITCODE) { break } # already created by an earlier try
+    & $gh release create "v$Version" $setup "$setup.sig" $latestPath --repo $repo --title "Aura $Version" --notes $Notes 2>&1 | ForEach-Object { "$_" }
+    if (-not $LASTEXITCODE) { break }; Start-Sleep 5
+  }
   Check "gh release create"
 } finally { Pop-Location }
 
