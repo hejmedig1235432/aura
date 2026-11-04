@@ -1650,7 +1650,19 @@ async function checkForUpdates(manual = false) {
     return;
   }
   info.textContent = `Version ${r.version} is available (you have ${r.current})`;
+  // the Settings button installs it too, so you don't have to close Settings to find the bar
+  const btn = $("check-updates");
+  btn.textContent = `Update to ${r.version}`;
+  btn.classList.add("accent");
+  btn.onclick = () => installUpdate(btn);
   showUpdateBar(r);
+}
+
+async function installUpdate(btn) {
+  btn.textContent = "Updating…";
+  btn.disabled = true;
+  try { await invoke("install_update"); } // Aura restarts when it's done
+  catch (e) { toast(`Update failed: ${e}`); btn.disabled = false; btn.textContent = "Try again"; }
 }
 
 function showUpdateBar(r) {
@@ -1662,12 +1674,7 @@ function showUpdateBar(r) {
     <button class="pill accent" id="update-go">Update</button><button class="ic" id="update-x">${icon("x")}</button>`;
   $("app").append(bar);
   $("update-x").onclick = () => bar.remove();
-  $("update-go").onclick = async () => {
-    $("update-go").textContent = "Updating…";
-    $("update-go").disabled = true;
-    try { await invoke("install_update"); } // Aura restarts when it's done
-    catch (e) { toast(`Update failed: ${e}`); bar.remove(); }
-  };
+  $("update-go").onclick = () => installUpdate($("update-go"));
 }
 
 $("check-updates").onclick = () => checkForUpdates(true);
