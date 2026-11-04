@@ -558,6 +558,21 @@ function backOff(e) {
   if (!m) return;
   pauseUntil = Date.now() + Math.max(5, +m[1]) * 1000;
   reportLog(`rate limited, pausing ${m[1]}s`);
+  showRateLimit(+m[1]);
+}
+
+/** A long block (the daily quota ran out) gets a banner saying how long, instead of silence. */
+function showRateLimit(secs) {
+  if (secs < 120 || $("ratelimit-bar")) return;
+  const until = new Date(Date.now() + secs * 1000);
+  const bar = document.createElement("div");
+  bar.className = "resume-bar";
+  bar.id = "ratelimit-bar";
+  bar.innerHTML = `<span>⏳ Spotify has paused Aura's requests until <b>${until.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</b>
+    (too many requests today). Music already playing keeps going.</span><button class="ic" id="ratelimit-x">${icon("x")}</button>`;
+  $("app").append(bar);
+  $("ratelimit-x").onclick = () => bar.remove();
+  setTimeout(() => bar.remove(), secs * 1000);
 }
 
 async function refresh() {
