@@ -6,7 +6,9 @@
  * Desktop-only commands (wallpaper, hotkeys, widget, Discord, ...) quietly do nothing.
  */
 (() => {
-  const CLIENT_ID = "b7f26bd2252d4c4183edb7b330716cab";
+  // The website's own Spotify app ("AURA"), whose Redirect URI is the GitHub Pages address.
+  // (The desktop app uses a separate one with http://127.0.0.1:8888/callback.)
+  const CLIENT_ID = "81ad3cf96c904778a46f55e657db529a";
   const API = "https://api.spotify.com/v1";
   // Must match a Redirect URI in the Spotify dashboard exactly, so always send the folder
   // address (https://.../aura/), even if the page was opened as .../aura/index.html.
