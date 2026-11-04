@@ -30,6 +30,7 @@
   /* ---------- sign-in (Authorization Code with PKCE, all in the browser) ---------- */
   const b64url = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   let token = load("aura.web.token", null); // { access_token, refresh_token, expires_at, scope }
+  let authError = "";
 
   async function exchange(params) {
     const r = await fetch("https://accounts.spotify.com/api/token", {
@@ -54,10 +55,13 @@
     if (q.get("code")) {
       const verifier = sessionStorage.getItem("aura.pkce");
       history.replaceState(null, "", REDIRECT);
-      if (verifier) await exchange({ grant_type: "authorization_code", code: q.get("code"), redirect_uri: REDIRECT, code_verifier: verifier }).catch((e) => console.error(e));
+      if (verifier) await exchange({ grant_type: "authorization_code", code: q.get("code"), redirect_uri: REDIRECT, code_verifier: verifier }).catch((e) => { authError = String(e); });
     } else if (q.get("error")) {
+      authError = `Spotify sign-in was cancelled or refused (${q.get("error")}).`;
       history.replaceState(null, "", REDIRECT);
     }
+    // show sign-in problems on the Connect screen instead of failing silently
+    if (authError) addEventListener("DOMContentLoaded", () => { const m = document.getElementById("login-msg"); if (m) m.textContent = authError; });
   })();
 
   async function accessToken() {
@@ -178,7 +182,12 @@
     restore_session: async () => {
       await authReady;
       if (!token?.scope?.includes("streaming")) return false;
-      try { await get("/me"); return true; } catch { return false; }
+      try { await get("/me"); return true; } catch (e) {
+        // "too many requests" doesn't mean signed out: let you in, Aura waits out rate limits
+        if (String(e).startsWith("RATE_LIMITED")) return true;
+        console.warn("[aura] sign-in check failed:", e);
+        return false;
+      }
     },
     login: () => login(),
     sign_out: async () => { token = null; localStorage.removeItem("aura.web.token"); cache.clear(); },
