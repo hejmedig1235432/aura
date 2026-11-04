@@ -736,7 +736,9 @@ function enterApp() {
   setInterval(() => {
     if (Date.now() - lastPoll >= pollDelay()) { lastPoll = Date.now(); refresh(); }
   }, 1000);
-  if (S.edgePlayer) startEdgePlayer();
+  // On the website the browser plays Spotify itself; the desktop app uses a hidden Edge window.
+  if (window.AURA_WEB) startWebPlayer();
+  else if (S.edgePlayer) startEdgePlayer();
   requestAnimationFrame(tick);
 }
 
@@ -875,7 +877,7 @@ function startWebPlayer() {
       reportLog(`ready ${device_id}`);
       // Become the player if nothing else is playing right now.
       const list = await invoke("devices").catch(() => []);
-      if (!list.some((d) => d.is_active)) await invoke("transfer", { deviceId: device_id }).catch(() => {});
+      if (!list.some((d) => d.is_active)) await invoke("transfer", { deviceId: device_id, play: false }).catch(() => {});
     });
     player.addListener("not_ready", () => { web.ready = false; reportLog("not_ready"); });
     player.connect();
@@ -1700,6 +1702,7 @@ listen("edge-player", ({ payload }) => {
 
 /** Aura's own, live player in a device list (null if it isn't running). */
 function ownDevice(list) {
+  if (web.ready && web.deviceId) return list.find((d) => d.id === web.deviceId) ?? null; // website: the tab's player
   if (edgeDeviceId) return list.find((d) => d.id === edgeDeviceId) ?? null;
   return null; // not started yet: don't guess, older "Aura" entries are dead
 }

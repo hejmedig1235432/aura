@@ -51,7 +51,10 @@ $latest = [ordered]@{
 $latestPath = Join-Path $bundle "latest.json"
 [IO.File]::WriteAllText($latestPath, ($latest | ConvertTo-Json -Depth 5), $utf8)
 
-# 4. commit, push and publish
+# 4. the website (GitHub Pages serves docs/) gets the same interface changes
+& (Join-Path $PSScriptRoot "build-web.ps1")
+
+# 5. commit, push and publish
 Push-Location $root
 try {
   git add -A

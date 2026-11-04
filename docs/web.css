@@ -1,0 +1,17 @@
+/* Aura on the web: hide what only the desktop app can do. */
+html.web [data-win],
+html.web #btn-mini,
+html.web #btn-widget,
+html.web .row:has([data-set="autostart"]),
+html.web .row:has([data-set="edgePlayer"]),
+html.web .row:has([data-set="songWallpaper"]),
+html.web .row:has([data-seg="material"]),
+html.web .row:has(#check-updates),
+html.web .row:has(#discord-id),
+html.web .row:has([data-set="discord"]),
+html.web .group:has(+ .row [data-set="discord"]) { display: none !important; }
+
+/* a browser page has no transparent window behind it */
+html.web body { background: var(--base); }
+html.web .titlebar { cursor: default; }
+html.web body.material #bg { opacity: 1; }
