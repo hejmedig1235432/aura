@@ -99,6 +99,7 @@ function set(key, value) {
   applySettings();
   if (key === "material") invoke("set_material", { kind: value }).catch(() => {});
   if (key === "autostart") invoke("set_autostart", { on: value }).catch((e) => toast(`Startup setting failed: ${e}`));
+  if (key === "songWallpaper") value ? updateWallpaper(true) : invoke("restore_wallpaper").catch((e) => toast(`Wallpaper: ${e}`));
 }
 
 function buildSettings() {
@@ -1698,3 +1699,106 @@ function ownDevice(list) {
   if (edgeDeviceId) return list.find((d) => d.id === edgeDeviceId) ?? null;
   return null; // not started yet: don't guess, older "Aura" entries are dead
 }
+
+/* ================= song as desktop background ================= */
+// Draws the current song at your screen's resolution: a blurred, darkened cover filling the
+// screen, the sharp cover in the middle, title and artist under it. Windows shows it as
+// the wallpaper; Aura restores yours when the setting is turned off or Aura closes.
+
+let wallpaperFor = null;
+
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous"; // Spotify's image server allows it, so the canvas can be saved
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/** Shortens text with "…" so it fits the given width. */
+function fit(ctx, text, max) {
+  if (ctx.measureText(text).width <= max) return text;
+  while (text.length > 1 && ctx.measureText(text + "…").width > max) text = text.slice(0, -1);
+  return text + "…";
+}
+
+async function updateWallpaper(force = false) {
+  if (!S.songWallpaper || !current.cover) return;
+  if (!force && wallpaperFor === current.uri) return;
+  wallpaperFor = current.uri;
+  const title = $("pb-title").textContent, artist = $("pb-artist").textContent;
+  try {
+    const img = await loadImage(current.cover);
+    const scale = window.devicePixelRatio || 1;
+    const W = Math.round(screen.width * scale), H = Math.round(screen.height * scale);
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const ctx = c.getContext("2d");
+
+    // background: the cover, blown up to fill, blurred and dimmed
+    const bg = Math.max(W, H) * 1.15;
+    ctx.filter = `blur(${Math.round(H / 18)}px) saturate(1.35) brightness(.5)`;
+    ctx.drawImage(img, (W - bg) / 2, (H - bg) / 2, bg, bg);
+    ctx.filter = "none";
+    const vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.2, W / 2, H / 2, Math.max(W, H) * 0.75);
+    vignette.addColorStop(0, "rgba(0,0,0,0)");
+    vignette.addColorStop(1, "rgba(0,0,0,.55)");
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
+
+    // the cover, with rounded corners and a soft shadow
+    const size = Math.round(H * 0.4);
+    const x = (W - size) / 2, y = H * 0.42 - size / 2;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,.55)";
+    ctx.shadowBlur = H / 25;
+    ctx.shadowOffsetY = H / 70;
+    roundRect(ctx, x, y, size, size, size * 0.06);
+    ctx.fillStyle = "#000";
+    ctx.fill();
+    ctx.restore();
+    ctx.save();
+    roundRect(ctx, x, y, size, size, size * 0.06);
+    ctx.clip();
+    ctx.drawImage(img, x, y, size, size);
+    ctx.restore();
+
+    // title and artist
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#fff";
+    ctx.font = `800 ${Math.round(H * 0.042)}px "Segoe UI Variable Display", "Segoe UI", sans-serif`;
+    ctx.fillText(fit(ctx, title, W * 0.7), W / 2, y + size + H * 0.045);
+    ctx.fillStyle = "rgba(255,255,255,.7)";
+    ctx.font = `500 ${Math.round(H * 0.024)}px "Segoe UI Variable Text", "Segoe UI", sans-serif`;
+    ctx.fillText(fit(ctx, artist, W * 0.6), W / 2, y + size + H * 0.105);
+
+    const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.9));
+    const bytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
+    if (wallpaperFor !== current.uri && !force) return; // the song changed while drawing
+    await invoke("set_song_wallpaper", { image: bytes });
+  } catch (e) {
+    wallpaperFor = null;
+    reportLog(`wallpaper: ${e}`);
+    if (force) toast(`Couldn't set the wallpaper: ${e}`);
+  }
+}
+
+// redraw on every song change
+const onTrackChangeExtrasForWallpaper = onTrackChangeExtras;
+onTrackChangeExtras = (t) => {
+  onTrackChangeExtrasForWallpaper(t);
+  setTimeout(() => updateWallpaper(), 600); // after the new cover is known
+};

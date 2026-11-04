@@ -21,6 +21,7 @@ mod discord;
 mod edge;
 mod hotkeys;
 mod updates;
+mod wallpaper;
 mod lyrics_index;
 mod plays;
 
@@ -829,12 +830,14 @@ fn main() {
             sync_plays, play_counts, top_items, discord_set, discord_clear,
             index_lyrics, lyrics_search, translate, play_history, toggle_widget,
             artist, album, play_context, hotkeys::show_overlay,
-            updates::check_update, updates::install_update
+            updates::check_update, updates::install_update,
+            wallpaper::set_song_wallpaper, wallpaper::restore_wallpaper
         ])
         .build(tauri::generate_context!())
         .expect("error while building Aura")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
+                let _ = wallpaper::restore_now(); // give you your own wallpaper back
                 if let Some(mut child) = app.state::<App>().edge.lock().unwrap().take() {
                     edge::stop(&mut child);
                 }
