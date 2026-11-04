@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aura</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <symbol id="i-side" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+      <symbol id="i-fwd" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></symbol>
+      <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+      <symbol id="i-mini" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="6" height="5" rx="1"/></symbol>
+      <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></symbol>
+      <symbol id="i-min" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+      <symbol id="i-max" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1.5"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></symbol>
+      <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-9-9.5C2 7 4.5 4.5 7.5 4.5c2 0 3.5 1.2 4.5 2.7 1-1.5 2.5-2.7 4.5-2.7 3 0 5.5 2.5 4.5 6-1.5 4.9-9 9.5-9 9.5z"/></symbol>
+      <symbol id="i-spark" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+      <symbol id="i-queue" viewBox="0 0 24 24"><path d="M4 6h12M4 12h12M4 18h8M17 15v6l4-3z"/></symbol>
+      <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M3 7h4l10 10h4M3 17h4l3-3M14 10l3-3h4M18 4l3 3-3 3M18 14l3 3-3 3"/></symbol>
+      <symbol id="i-prev" viewBox="0 0 24 24"><path d="M6 5v14" /><path class="fill" d="M19 5L9 12l10 7z"/></symbol>
+      <symbol id="i-next" viewBox="0 0 24 24"><path d="M18 5v14" /><path class="fill" d="M5 5l10 7-10 7z"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path class="fill" d="M8 5l11 7-11 7z"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><path class="fill" d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></symbol>
+      <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M4 11V9a3 3 0 0 1 3-3h12l-3-3M20 13v2a3 3 0 0 1-3 3H5l3 3"/></symbol>
+      <symbol id="i-device" viewBox="0 0 24 24"><rect x="2.5" y="5" width="13" height="10" rx="1.5"/><path d="M6 19h6"/><rect x="17.5" y="8" width="4" height="11" rx="1"/></symbol>
+      <symbol id="i-vol" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol>
+      <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></symbol>
+      <symbol id="i-up" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+      <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+      <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
+      <symbol id="i-widget" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><rect x="6" y="7" width="5" height="5" rx="1"/><path d="M13 8h5M13 11h3M8 20h8"/></symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-3 4h10l-3-4V3M12 13v8"/></symbol>
+      <symbol id="i-dots" viewBox="0 0 24 24"><circle class="fill" cx="5" cy="12" r="1.6"/><circle class="fill" cx="12" cy="12" r="1.6"/><circle class="fill" cx="19" cy="12" r="1.6"/></symbol>
+    </defs>
+  </svg>
+
+  <div id="bg"></div>
+  <div id="spot"></div>
+
+  <!-- login -->
+  <section id="login">
+    <div class="titlebar" data-tauri-drag-region>
+      <span class="spacer" data-tauri-drag-region></span>
+      <button class="ic win" data-win="min"><svg><use href="#i-min"/></svg></button>
+      <button class="ic win close" data-win="close"><svg><use href="#i-x"/></svg></button>
+    </div>
+    <div class="login-body">
+      <img class="app-logo" src="logo.png" alt="" />
+      <h1>Aura</h1>
+      <p>Your Spotify, refracted.</p>
+      <button id="connect" class="pill accent">Connect Spotify</button>
+      <p class="hint" id="login-msg"></p>
+    </div>
+  </section>
+
+  <!-- full app -->
+  <section id="app" class="hidden">
+    <header class="titlebar" data-tauri-drag-region>
+      <button class="ic" id="toggle-side" title="Toggle sidebar"><svg><use href="#i-side"/></svg></button>
+      <button class="ic" id="nav-back" title="Back"><svg><use href="#i-back"/></svg></button>
+      <button class="ic" id="nav-fwd" title="Forward"><svg><use href="#i-fwd"/></svg></button>
+      <span class="spacer" data-tauri-drag-region></span>
+      <label class="searchbox">
+        <svg><use href="#i-search"/></svg>
+        <input id="search" placeholder="Search songs, albums, artists" />
+        <kbd>Ctrl K</kbd>
+      </label>
+      <span class="spacer" data-tauri-drag-region></span>
+      <button class="ic" id="btn-full" title="Fullscreen"><svg><use href="#i-full"/></svg></button>
+      <button class="ic" id="btn-mini" title="Mini player"><svg><use href="#i-mini"/></svg></button>
+      <button class="ic" id="btn-widget" title="Desktop widget"><svg><use href="#i-widget"/></svg></button>
+      <button class="ic" id="toggle-panel" title="Now playing panel"><svg><use href="#i-panel"/></svg></button>
+      <button class="ic" id="btn-settings" title="Settings"><svg><use href="#i-gear"/></svg></button>
+      <button class="ic win" data-win="min"><svg><use href="#i-min"/></svg></button>
+      <button class="ic win" data-win="max"><svg><use href="#i-max"/></svg></button>
+      <button class="ic win close" data-win="close"><svg><use href="#i-x"/></svg></button>
+    </header>
+
+    <div class="layout">
+      <aside class="card" id="side">
+        <nav>
+          <a data-view="home"><span class="nav-ic"><svg><use href="#i-home"/></svg></span>Home</a>
+          <a data-view="liked"><span class="nav-ic liked"><svg><use href="#i-heart"/></svg></span>Liked Songs</a>
+          <a data-view="top"><span class="nav-ic"><svg><use href="#i-spark"/></svg></span>For You</a>
+          <a data-view="recent"><span class="nav-ic"><svg><use href="#i-clock"/></svg></span>Recently Played</a>
+          <a data-view="queue"><span class="nav-ic"><svg><use href="#i-queue"/></svg></span>Queue</a>
+          <a data-view="stats"><span class="nav-ic"><svg><use href="#i-chart"/></svg></span>Stats</a>
+          <a data-view="history"><span class="nav-ic"><svg><use href="#i-cal"/></svg></span>History</a>
+        </nav>
+        <div class="section-label">PLAYLISTS <span id="pl-count"></span></div>
+        <div id="playlists"></div>
+        <div class="user">
+          <img id="avatar" alt="" />
+          <b id="username"></b>
+          <button class="ic" id="logout" title="More"><svg><use href="#i-dots"/></svg></button>
+        </div>
+      </aside>
+
+      <main class="card" id="view"></main>
+
+      <section class="card" id="panel">
+        <img id="np-cover" class="cover" alt="" />
+        <h2 id="np-title">Nothing playing</h2>
+        <p id="np-sub" class="muted"></p>
+        <p id="np-plays" class="np-plays"></p>
+        <div class="lyrics" id="lyrics"></div>
+      </section>
+    </div>
+
+    <footer class="player">
+      <div class="pl-left">
+        <img id="pb-cover" alt="" />
+        <div class="meta"><b id="pb-title">—</b><span id="pb-artist"></span></div>
+        <button class="ic" id="like" title="Like"><svg><use href="#i-heart"/></svg></button>
+      </div>
+      <div class="pl-center">
+        <div class="buttons">
+          <button class="ic" id="shuffle" title="Shuffle"><svg><use href="#i-shuffle"/></svg></button>
+          <button class="ic" data-act="prev"><svg><use href="#i-prev"/></svg></button>
+          <button class="ic play" data-toggle><svg><use href="#i-play"/></svg></button>
+          <button class="ic" data-act="next"><svg><use href="#i-next"/></svg></button>
+          <button class="ic" id="repeat" title="Repeat"><svg><use href="#i-repeat"/></svg><i></i></button>
+        </div>
+        <div class="seek"><span data-pos>0:00</span><div class="track-bar" data-seek><div data-bar></div></div><span data-dur>0:00</span></div>
+      </div>
+      <div class="pl-right">
+        <div class="pop-wrap">
+          <button class="ic" id="btn-sleep" title="Sleep timer"><svg><use href="#i-moon"/></svg><i class="sleep-left"></i></button>
+          <div class="popover hidden" id="sleep-menu">
+            <h4>SLEEP TIMER</h4>
+            <div class="dev" data-sleep="15">15 minutes</div>
+            <div class="dev" data-sleep="30">30 minutes</div>
+            <div class="dev" data-sleep="60">1 hour</div>
+            <div class="dev" data-sleep="end">End of this song</div>
+            <div class="dev" data-sleep="off">Turn off</div>
+          </div>
+        </div>
+        <button class="ic" id="btn-lyrics" title="Lyrics (L)"><svg><use href="#i-mic"/></svg></button>
+        <button class="ic" data-view-btn="queue" title="Queue"><svg><use href="#i-queue"/></svg></button>
+        <div class="pop-wrap">
+          <button class="ic" id="btn-devices" title="Devices"><svg><use href="#i-device"/></svg></button>
+          <div class="popover hidden" id="devices"></div>
+        </div>
+        <button class="ic" id="btn-mute" title="Mute (M)"><svg><use href="#i-vol"/></svg></button>
+        <input type="range" id="volume" min="0" max="100" />
+      </div>
+    </footer>
+
+    <p id="toast" class="toast hidden"></p>
+
+    <div id="lyrics-view" class="hidden">
+      <div class="lv-bg" id="lv-bg"></div>
+      <div class="lv-side">
+        <img id="lv-cover" alt="" />
+        <h2 id="lv-title">—</h2>
+        <p id="lv-artist" class="muted"></p>
+      </div>
+      <div class="lyrics lv-lyrics" id="lv-lyrics"></div>
+      <div class="lv-tools">
+        <button class="pill" id="lv-karaoke" title="Fill each line as it's sung">Karaoke</button>
+        <div class="pop-wrap lang-wrap">
+          <button class="pill lang-btn" id="lv-lang" title="Translate lyrics">
+            <svg class="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.7 5.4 3.7 8.5s-1.2 5.9-3.7 8.5c-2.5-2.6-3.7-5.4-3.7-8.5s1.2-5.9 3.7-8.5z"/></svg>
+            <span id="lv-lang-label">Translate</span>
+            <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="popover lang-menu hidden" id="lv-lang-menu">
+            <h4>TRANSLATE LYRICS</h4>
+            <div class="dev" data-lang="">No translation</div>
+            <div class="lang-sep"></div>
+            <div class="dev" data-lang="en">English <small>EN</small></div>
+            <div class="dev" data-lang="da">Dansk <small>DA</small></div>
+            <div class="dev" data-lang="sv">Svenska <small>SV</small></div>
+            <div class="dev" data-lang="no">Norsk <small>NO</small></div>
+            <div class="dev" data-lang="de">Deutsch <small>DE</small></div>
+            <div class="dev" data-lang="es">Español <small>ES</small></div>
+            <div class="dev" data-lang="fr">Français <small>FR</small></div>
+            <div class="dev" data-lang="it">Italiano <small>IT</small></div>
+            <div class="dev" data-lang="ja">日本語 <small>JA</small></div>
+            <div class="dev" data-lang="ko">한국어 <small>KO</small></div>
+          </div>
+        </div>
+      </div>
+      <button class="ic lv-close" id="lv-close" title="Close (Esc)"><svg><use href="#i-x"/></svg></button>
+    </div>
+
+    <div id="ctx" class="ctx hidden">
+      <button data-ctx="play">Play</button>
+      <button data-ctx="upnext">Add to Up next</button>
+      <button data-ctx="queue">Add to Spotify queue</button>
+      <button data-ctx="like">Save to Liked Songs</button>
+      <button data-ctx="copy">Copy song link</button>
+    </div>
+  </section>
+
+  <!-- mini player -->
+  <section id="mini" class="hidden">
+    <div class="titlebar" data-tauri-drag-region>
+      <b class="brand-sm" data-tauri-drag-region>AURA</b>
+      <span class="spacer" data-tauri-drag-region></span>
+      <button class="ic" id="mini-pin" title="Always on top"><svg><use href="#i-pin"/></svg></button>
+      <button class="ic" id="mini-exit" title="Back to full"><svg><use href="#i-min"/></svg></button>
+      <button class="ic win close" data-win="close"><svg><use href="#i-x"/></svg></button>
+    </div>
+    <div class="mini-head">
+      <img id="mini-cover" alt="" />
+      <div><h3 id="mini-title">—</h3><p id="mini-artist" class="muted"></p></div>
+    </div>
+    <div class="lyrics mini-lyrics" id="mini-lyrics"></div>
+    <div class="seek"><span data-pos>0:00</span><div class="track-bar" data-seek><div data-bar></div></div><span data-dur>0:00</span></div>
+    <div class="buttons">
+      <button class="ic" data-act="prev"><svg><use href="#i-prev"/></svg></button>
+      <button class="ic play" data-toggle><svg><use href="#i-play"/></svg></button>
+      <button class="ic" data-act="next"><svg><use href="#i-next"/></svg></button>
+    </div>
+  </section>
+
+  <!-- settings -->
+  <div id="settings-backdrop" class="hidden">
+    <div class="settings">
+      <div class="settings-head"><h2>Settings</h2><button class="ic" id="settings-close"><svg><use href="#i-x"/></svg></button></div>
+      <div class="settings-body">
+        <div class="group">COLORS</div>
+        <div class="row"><div><b>Accent</b><small>Buttons, sliders, highlights</small></div>
+          <label class="switch-label"><span class="switch" data-set="accentMatch"></span>Match album art</label></div>
+        <div class="row"><div><b>Custom accent</b><small>Pick any color or type a hex code</small></div>
+          <div class="color-field"><input type="color" data-color="accent" /><input class="hex" data-hex="accent" /></div></div>
+        <div class="swatches" id="swatches"></div>
+        <div class="row"><div><b>Gradient accents</b><small>Blend a second color through buttons and sliders</small></div>
+          <div class="color-field"><span class="switch" data-set="gradientOn"></span><input type="color" data-color="accent2" /><input class="hex" data-hex="accent2" /></div></div>
+        <div class="row"><b>Background</b>
+          <div class="seg" data-seg="bgMode"><button data-v="art">Album art</button><button data-v="gradient">Gradient</button><button data-v="solid">Solid</button></div></div>
+        <div class="row"><b>Gradient colors</b>
+          <div class="color-field"><input type="color" data-color="g1" /><input class="hex" data-hex="g1" /><span class="muted">›</span><input type="color" data-color="g2" /><input class="hex" data-hex="g2" /></div></div>
+        <div class="row"><b>Gradient angle</b>
+          <div class="range-field"><input type="range" min="0" max="360" data-range="angle" /><span data-out="angle"></span></div></div>
+        <div class="presets" id="presets"></div>
+
+        <div class="group">EFFECTS</div>
+        <div class="row"><div><b>Cursor spotlight</b><small>A soft light that follows the pointer</small></div>
+          <span class="switch" data-set="spotlight"></span></div>
+        <div class="row"><b>Spotlight size</b>
+          <div class="range-field"><input type="range" min="80" max="600" data-range="spotSize" /><span data-out="spotSize"></span></div></div>
+        <div class="row"><b>Spotlight strength</b>
+          <div class="range-field"><input type="range" min="0" max="100" data-range="spotStrength" /><span data-out="spotStrength"></span></div></div>
+        <div class="row"><div><b>Window material</b><small>Windows 11 backdrop behind the glass</small></div>
+          <div class="seg" data-seg="material"><button data-v="mica">Mica</button><button data-v="acrylic">Acrylic</button><button data-v="tabbed">Tabbed</button><button data-v="solid">Solid</button></div></div>
+        <div class="row"><b>Glass blur</b>
+          <div class="range-field"><input type="range" min="0" max="60" data-range="blur" /><span data-out="blur"></span></div></div>
+        <div class="row"><b>Panel opacity</b>
+          <div class="range-field"><input type="range" min="0" max="100" data-range="panelAlpha" /><span data-out="panelAlpha"></span></div></div>
+
+        <div class="group">PLAYBACK</div>
+        <div class="row"><div><b>Fade between songs</b><small>Fade the volume out before a skip or the end of a song, and back in on the next</small></div>
+          <span class="switch" data-set="fade"></span></div>
+
+        <div class="row"><div><b>Lyrics timing</b><small>Move lyrics and karaoke earlier (+) or later (−) if they don't match the singing</small></div>
+          <div class="range-field"><input type="range" min="-1000" max="1500" step="100" data-range="lyricsOffset" /><span data-out="lyricsOffset"></span></div></div>
+
+        <div class="group">DISCORD</div>
+        <div class="row"><div><b>Show on Discord</b><small>"Listening to Aura" with the current song on your Discord profile</small></div>
+          <span class="switch" data-set="discord"></span></div>
+        <div class="row"><div><b>Discord application ID</b><small>From discord.com/developers/applications (name the app "Aura")</small></div>
+          <input class="hex wide" id="discord-id" placeholder="1234567890" /></div>
+
+        <div class="group">SYSTEM</div>
+        <div class="row"><div><b>Updates</b><small id="update-info">Aura checks for new versions when it starts</small></div>
+          <button class="pill" id="check-updates">Check for updates</button></div>
+        <div class="row"><div><b>Open on startup</b><small>Launch Aura when you sign in to Windows</small></div>
+          <span class="switch" data-set="autostart"></span></div>
+
+        <div class="row"><div><b>Built-in player (Edge)</b><small>Play audio through Spotify's official player in a hidden Microsoft Edge window, so the Spotify app isn't needed. Restart Aura after changing.</small></div>
+          <span class="switch" data-set="edgePlayer"></span></div>
+        
+
+        <div class="group">ACCOUNT</div>
+        <div class="row"><div><b>Signed in</b><small id="acct-info"></small></div>
+          <button class="pill" id="signout">Sign out</button></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

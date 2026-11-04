@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Aura widget</title>
+  <style>
+    :root { --accent: #fe9090; }
+    * { box-sizing: border-box; margin: 0; }
+    html, body { background: transparent; height: 100%; overflow: hidden; user-select: none; }
+    body { font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: #fff; padding: 6px; }
+    .card {
+      position: relative; height: 100%; display: flex; gap: 14px; align-items: center; padding: 12px 14px; overflow: hidden;
+      border-radius: 18px; background: rgba(14, 16, 24, .55); border: 1px solid rgba(255,255,255,.12);
+      backdrop-filter: blur(24px) saturate(1.4); box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    .bg { position: absolute; inset: -40px; background-size: cover; background-position: center; filter: blur(40px) brightness(.5) saturate(1.4); z-index: -1; opacity: .8; }
+    img { width: 96px; height: 96px; border-radius: 12px; object-fit: cover; flex: none; box-shadow: 0 6px 20px rgba(0,0,0,.4); background: rgba(255,255,255,.08); }
+    .meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .title { font-weight: 800; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .artist { font-size: 12px; color: rgba(255,255,255,.65); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .line { font-size: 14px; font-weight: 700; margin-top: 6px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; transition: opacity .3s; }
+    .next { font-size: 12px; color: rgba(255,255,255,.4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .controls { position: absolute; right: 8px; top: 6px; display: flex; gap: 2px; opacity: 0; transition: opacity .2s; }
+    .card:hover .controls { opacity: 1; }
+    button { width: 26px; height: 26px; border: 0; border-radius: 7px; background: rgba(0,0,0,.35); color: #fff; cursor: pointer; font-size: 12px; }
+    button:hover { background: var(--accent); color: #111; }
+  </style>
+</head>
+<body>
+  <div class="card" data-tauri-drag-region>
+    <div class="bg" id="bg" data-tauri-drag-region></div>
+    <img id="cover" alt="" data-tauri-drag-region />
+    <div class="meta" data-tauri-drag-region>
+      <div class="title" id="title" data-tauri-drag-region>Aura</div>
+      <div class="artist" id="artist" data-tauri-drag-region>Nothing playing</div>
+      <div class="line" id="line" data-tauri-drag-region></div>
+      <div class="next" id="next" data-tauri-drag-region></div>
+    </div>
+    <div class="controls">
+      <button data-a="prev" title="Previous">⏮</button>
+      <button data-a="toggle" title="Play/pause" id="pp">⏯</button>
+      <button data-a="next" title="Next">⏭</button>
+      <button data-a="close" title="Hide widget">✕</button>
+    </div>
+  </div>
+  <script>
+    const { emit, listen } = window.__TAURI__.event;
+    const $ = (id) => document.getElementById(id);
+    listen("aura-np", ({ payload: p }) => {
+      $("title").textContent = p.title || "Aura";
+      $("artist").textContent = p.artist || "";
+      if (p.cover && $("cover").src !== p.cover) { $("cover").src = p.cover; $("bg").style.backgroundImage = `url("${p.cover}")`; }
+      $("line").textContent = p.line || (p.playing ? "♪" : "Paused");
+      $("next").textContent = p.next || "";
+      $("pp").textContent = p.playing ? "⏸" : "▶";
+      if (p.accent) document.documentElement.style.setProperty("--accent", p.accent);
+    });
+    document.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => emit("aura-widget-action", b.dataset.a)));
+    emit("aura-widget-ready");
+  </script>
+</body>
+</html>

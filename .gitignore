@@ -1,0 +1,7 @@
+﻿# build output
+src-tauri/target/
+src-tauri/target-installer/
+src-tauri/gen/
+# never commit signing keys or local tokens
+*.key
+token.json

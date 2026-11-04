@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Aura player</title></head>
+<body style="background:#0e1118;color:#888;font:12px sans-serif">
+Aura's audio player. Keep this window open.
+<script>
+  // Spotify's official Web Playback SDK, hosted in Edge (which has full Widevine DRM).
+  // Aura controls it through the Web API like any other Spotify Connect device.
+  const key = new URLSearchParams(location.search).get("k");
+  const log = (m) => fetch(`/log?k=${key}&m=${encodeURIComponent(m)}`).catch(() => {});
+  let errors = [];
+
+  window.onSpotifyWebPlaybackSDKReady = () => {
+    const player = new Spotify.Player({
+      name: "Aura",
+      getOAuthToken: (cb) => fetch(`/token?k=${key}`).then((r) => r.text()).then(cb),
+      volume: 0.7,
+    });
+    for (const ev of ["initialization_error", "authentication_error", "account_error"])
+      player.addListener(ev, ({ message }) => log(`${ev}: ${message}`));
+    // Spotify refuses some songs to its web player (the same ones every time); the SDK skips
+    // those on its own. Only give up if nothing has ever played, which means this player
+    // can't stream at all.
+    // Spotify's web player sometimes refuses songs with a generic "Playback error". Aura hands
+    // the song to the Spotify app when that happens, so stop here instead of skipping on.
+    let readyAt = 0, everPlayed = false, current = "", currentUri = "";
+    // The SDK fires several errors per failed song; report each song once per 10 seconds.
+    const reported = new Map();
+    player.addListener("playback_error", ({ message }) => {
+      const now = Date.now();
+      if (now - (reported.get(currentUri) ?? 0) < 10000) return;
+      reported.set(currentUri, now);
+      log(`playback_error on ${current}: ${message}`);
+      // stop here rather than letting the SDK skip on; Aura retries or moves the song
+      player.pause().catch(() => {});
+      log(`failed ${currentUri}`);
+    });
+    player.addListener("ready", ({ device_id }) => { readyAt = Date.now(); log(`ready ${device_id}`); });
+    player.addListener("not_ready", () => log("not_ready"));
+    let last = null;
+    player.addListener("player_state_changed", (s) => {
+      const t = s?.track_window?.current_track;
+      if (t && t.uri !== last) { last = t.uri; current = t.name; currentUri = t.uri; log(`now ${t.name}`); }
+      if (s && !s.paused && s.position > 3000) everPlayed = true;
+    });
+    player.connect();
+  };
+</script>
+<script src="https://sdk.scdn.co/spotify-player.js"></script>
+</body>
+</html>

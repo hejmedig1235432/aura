@@ -1,0 +1,26 @@
+[package]
+name = "aura"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+rspotify = { version = "0.13", default-features = false, features = ["client-reqwest", "reqwest-rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["sync", "rt", "time"] }
+chrono = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+webbrowser = "1"
+dirs = "5"
+window-vibrancy = "0.5"
+tauri-plugin-autostart = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-updater = "2"
+log = "0.4"
+simplelog = "0.12"
+discord-rich-presence = "1"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
