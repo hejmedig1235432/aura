@@ -177,6 +177,18 @@ fn request_stats(app: State<'_, App>) -> Res {
     Ok(offline::stats(blocked))
 }
 
+/// Seconds since the last mouse or keyboard input anywhere on the PC (for the screensaver).
+#[tauri::command]
+fn idle_secs() -> u64 {
+    use windows_sys::Win32::System::SystemInformation::GetTickCount;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+    let mut info = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
+    if unsafe { GetLastInputInfo(&mut info) } == 0 {
+        return 0;
+    }
+    (unsafe { GetTickCount() }.wrapping_sub(info.dwTime) / 1000) as u64
+}
+
 /// This build's version, for "What's new" after an update.
 #[tauri::command]
 fn app_version(app: tauri::AppHandle) -> String {
@@ -883,7 +895,7 @@ fn main() {
             artist, album, play_context, hotkeys::show_overlay,
             updates::check_update, updates::install_update,
             wallpaper::set_song_wallpaper, wallpaper::restore_wallpaper,
-            desk::toggle_desk, desk::desk_hot, request_stats, app_version
+            desk::toggle_desk, desk::desk_hot, request_stats, app_version, idle_secs
         ])
         .build(tauri::generate_context!())
         .expect("error while building Aura")

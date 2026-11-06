@@ -85,6 +85,13 @@ fn serve(app: AppHandle, listener: TcpListener, key: String) {
                     Ok(t) => respond(&mut stream, "200 OK", "text/plain", &t),
                     Err(e) => respond(&mut stream, "500 Internal Server Error", "text/plain", &e),
                 }
+            } else if path.starts_with("/state") {
+                // the player's own playback state: Aura uses it instead of polling Spotify
+                use tauri::Emitter;
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&percent_decode(query_param(&path, "s").unwrap_or(""))) {
+                    let _ = app.emit_to("main", "edge-state", v);
+                }
+                respond(&mut stream, "204 No Content", "text/plain", "");
             } else if path.starts_with("/log") {
                 let msg = percent_decode(query_param(&path, "m").unwrap_or(""));
                 log::info!("edgeplayer: {msg}");

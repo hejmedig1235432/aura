@@ -519,3 +519,20 @@ body.karaoke .lyrics p.active .tr { -webkit-text-fill-color: rgba(255,255,255,.7
 .clock-d { font-size: 11px; color: var(--muted); }
 .clock-h { font-size: 10px; color: var(--muted); text-align: center; }
 @media (max-width: 900px) { .wrapped-cols { grid-template-columns: 1fr; } }
+
+/* ---------- visualizer ---------- */
+.viz { width: 100%; height: 44px; margin-top: 12px; flex: none; opacity: .9; }
+
+/* ---------- screensaver ---------- */
+#saver {
+  position: fixed; inset: 0; z-index: 100; overflow: hidden; cursor: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+  background: #000; animation: fade .6s ease;
+}
+.saver-bg { position: absolute; inset: -12%; background-size: cover; background-position: center; filter: blur(80px) brightness(.4) saturate(1.4); z-index: -1; }
+#saver-cover { width: min(38vh, 60vw); aspect-ratio: 1; object-fit: cover; border-radius: 18px; box-shadow: 0 30px 90px rgba(0,0,0,.6); }
+#saver h1 { font-size: 5vh; margin-top: 4vh; letter-spacing: -.5px; }
+#saver p { color: rgba(255,255,255,.7); font-size: 2.4vh; margin-top: .6vh; }
+#saver .saver-line { color: #fff; font-size: 3.6vh; font-weight: 800; margin-top: 4vh; min-height: 4.6vh; max-width: 80vw; transition: opacity .3s; }
+.saver-viz { position: absolute; left: 6vw; right: 6vw; bottom: 4vh; width: 88vw; height: 10vh; opacity: .55; }
+.saver-clock { position: absolute; top: 4vh; right: 5vw; font-size: 4vh; font-weight: 300; color: rgba(255,255,255,.75); }

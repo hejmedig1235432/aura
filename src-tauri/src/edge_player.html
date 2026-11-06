@@ -38,6 +38,22 @@ Aura's audio player. Keep this window open.
     player.addListener("ready", ({ device_id }) => { readyAt = Date.now(); log(`ready ${device_id}`); });
     player.addListener("not_ready", () => log("not_ready"));
     let last = null;
+    // Tell Aura about every change (song, pause, seek, shuffle...) so it doesn't have to keep
+    // asking Spotify what's playing.
+    player.addListener("player_state_changed", (s) => {
+      // no state: playback moved to another device, so Aura should ask Spotify again
+      if (!s) { fetch(`/state?k=${key}&s=${encodeURIComponent('{"track":null}')}`).catch(() => {}); return; }
+      const tr = s.track_window?.current_track;
+      const state = {
+        paused: s.paused, position: s.position, at: Date.now(), shuffle: s.shuffle, repeat: s.repeat_mode,
+        track: tr && {
+          uri: tr.uri, id: tr.id, name: tr.name, duration_ms: tr.duration_ms,
+          artists: (tr.artists || []).map((a) => ({ name: a.name, uri: a.uri })),
+          album: { name: tr.album?.name, uri: tr.album?.uri, images: (tr.album?.images || []).map((i) => ({ url: i.url, width: i.width })) },
+        },
+      };
+      fetch(`/state?k=${key}&s=${encodeURIComponent(JSON.stringify(state))}`).catch(() => {});
+    });
     player.addListener("player_state_changed", (s) => {
       const t = s?.track_window?.current_track;
       if (t && t.uri !== last) { last = t.uri; current = t.name; currentUri = t.uri; log(`now ${t.name}`); }

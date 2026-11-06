@@ -17,7 +17,7 @@ const DEFAULTS = {
   accentMatch: false, accent: "#ffffff", gradientOn: true, accent2: "#fe9090",
   bgMode: "art", g1: "#0e1118", g2: "#3b4660", angle: 82,
   spotlight: true, spotSize: 226, spotStrength: 56,
-  material: "tabbed", blur: 30, panelAlpha: 55, autostart: true, webPlayerBeta: false, edgePlayer: true, fade: true, discord: true, discordId: "1567260633156554803", lyricsOffset: 400,
+  material: "tabbed", blur: 30, panelAlpha: 55, autostart: true, webPlayerBeta: false, edgePlayer: true, fade: true, discord: true, discordId: "1567260633156554803", lyricsOffset: 400, visualizer: true, saverMin: "5",
 };
 const SWATCHES = ["#22c55e", "#2dd4bf", "#38bdf8", "#6366f1", "#a855f7", "#ec4899", "#f43f5e", "#f97316", "#facc15", "#a3e635", "#ffffff", "#94a3b8"];
 const PRESETS = {
@@ -455,6 +455,8 @@ const isNoDevice = (e) => /no active device|NO_ACTIVE_DEVICE|404/i.test(String(e
 /** Runs a playback action; if no device exists, opens the Spotify app and retries on it. */
 let lastAction = 0; // when you last did something; Aura checks Spotify more often right after
 function pollDelay() {
+  // Aura's own player reports changes itself: only check with Spotify now and then
+  if (Date.now() - edgeLiveAt < 120000) return 60000;
   if (Date.now() - lastAction < 8000) return 2000;
   if (document.hidden) return 60000;
   if (!current.playing) return 30000;
@@ -1983,3 +1985,137 @@ function checkMilestones() {
   fresh.sort((a, b) => b[0] - a[0]);
   if (fresh[0]) toast(`🎉 ${ordinal(fresh[0][0])} play of ${fresh[0][1]}!`);
 }
+
+/* ================= live state from Aura's own player ================= */
+// The Edge player reports every change (song, pause, seek, shuffle, repeat). While those
+// reports come in, Aura shows them directly and barely needs to ask Spotify (see pollDelay).
+
+var edgeLiveAt = 0; // var: pollDelay (earlier in the file) reads it
+const REPEAT = ["off", "context", "track"];
+
+listen("edge-state", ({ payload: s }) => {
+  if (!s || !s.track) { edgeLiveAt = 0; return; } // playing elsewhere now: back to asking Spotify
+  edgeLiveAt = Date.now();
+  const t = s.track;
+  current.playing = !s.paused;
+  current.pos = s.position + (s.paused ? 0 : Date.now() - s.at);
+  current.at = performance.now();
+  current.dur = t.duration_ms;
+  current.shuffle = s.shuffle;
+  current.repeat = REPEAT[s.repeat] ?? "off";
+  if (t.uri !== current.uri) {
+    current.uri = t.uri;
+    current.id = t.id;
+    const imgs = [...(t.album?.images ?? [])].sort((a, b) => (b.width ?? 0) - (a.width ?? 0));
+    current.cover = imgs[0]?.url ?? null;
+    t.album.images = imgs;
+    onTrackChange(t);
+  }
+  $$("[data-toggle]").forEach((b) => (b.innerHTML = icon(current.playing ? "pause" : "play")));
+  $("shuffle").classList.toggle("on", !!current.shuffle);
+  $("repeat").classList.toggle("on", current.repeat !== "off");
+  $("repeat").querySelector("i").textContent = current.repeat === "track" ? "1" : "";
+  markPlaying();
+});
+
+/* ================= visualizer ================= */
+// Spotify's audio is copy-protected and its audio-analysis data isn't available to new apps,
+// so these bars are an animation: they move while music plays, settle when paused, and take
+// the song's colours.
+
+function startViz(canvas, bars) {
+  const ctx = canvas.getContext("2d");
+  const h = new Float32Array(bars), target = new Float32Array(bars);
+  let phase = Math.random() * 100, last = 0;
+  function frame(ts) {
+    requestAnimationFrame(frame);
+    if (ts - last < 33 || !canvas.offsetParent) return; // ~30 fps, and only when visible
+    last = ts;
+    const w = (canvas.width = canvas.clientWidth * devicePixelRatio);
+    const hh = (canvas.height = canvas.clientHeight * devicePixelRatio);
+    const on = S.visualizer && current.playing;
+    phase += 0.06;
+    for (let i = 0; i < bars; i++) {
+      if (on && Math.random() < 0.18) {
+        // a slow wave across the bars plus random kicks feels like music without being audio
+        const wave = 0.5 + 0.5 * Math.sin(phase + i * 0.35) * Math.sin(phase * 0.37 + i * 0.11);
+        target[i] = 0.15 + 0.75 * wave * (0.55 + 0.45 * Math.random());
+      } else if (!on) target[i] = 0.04;
+      h[i] += (target[i] - h[i]) * (on ? 0.22 : 0.08);
+    }
+    ctx.clearRect(0, 0, w, hh);
+    const styles = getComputedStyle(document.documentElement);
+    const grad = ctx.createLinearGradient(0, hh, 0, 0);
+    grad.addColorStop(0, (S.accentMatch && artAccent) || styles.getPropertyValue("--accent").trim() || "#fff");
+    grad.addColorStop(1, styles.getPropertyValue("--accent2").trim() || "#fe9090");
+    ctx.fillStyle = grad;
+    const gap = w / bars, bw = Math.max(2, gap * 0.62), r = bw / 2;
+    for (let i = 0; i < bars; i++) {
+      const bh = Math.max(r * 2, h[i] * hh);
+      const x = i * gap + (gap - bw) / 2, y = hh - bh;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(x, y, bw, bh, r) : ctx.rect(x, y, bw, bh);
+      ctx.fill();
+    }
+  }
+  requestAnimationFrame(frame);
+}
+startViz($("viz"), 36);
+startViz($("saver-viz"), 64);
+function applyVizSetting() { $("viz").classList.toggle("hidden", !S.visualizer); }
+applyVizSetting();
+document.addEventListener("click", (e) => { if (e.target.closest('[data-set="visualizer"]')) setTimeout(applyVizSetting, 0); });
+
+/* ================= screensaver ================= */
+// After a few idle minutes while music plays: full-screen cover, lyrics, visualizer and clock.
+// Any mouse or keyboard input closes it.
+
+let saverOn = false;
+let lastLocalInput = Date.now(); // the website can only see input in its own tab
+for (const ev of ["pointermove", "pointerdown", "keydown", "wheel"]) addEventListener(ev, () => (lastLocalInput = Date.now()), { passive: true });
+
+async function idleSeconds() {
+  if (window.AURA_WEB) return (Date.now() - lastLocalInput) / 1000;
+  return invoke("idle_secs").catch(() => 0);
+}
+
+function fillSaver() {
+  $("saver-cover").src = current.cover ?? "";
+  $("saver-bg").style.backgroundImage = current.cover ? `url("${current.cover}")` : "";
+  $("saver-title").textContent = $("pb-title").textContent;
+  $("saver-artist").textContent = $("pb-artist").textContent;
+  const line = lastLine >= 0 ? lyricLines[lastLine]?.text : "";
+  if ($("saver-line").textContent !== (line || "")) $("saver-line").textContent = line || "";
+  $("saver-clock").textContent = new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
+async function enterSaver() {
+  saverOn = true;
+  fillSaver();
+  $("saver").classList.remove("hidden");
+  if (!window.AURA_WEB) {
+    await win.setFullscreen(true).catch(() => {});
+    await win.setAlwaysOnTop(true).catch(() => {});
+  }
+}
+
+async function exitSaver() {
+  saverOn = false;
+  $("saver").classList.add("hidden");
+  if (!window.AURA_WEB) {
+    await win.setAlwaysOnTop(false).catch(() => {});
+    await win.setFullscreen(false).catch(() => {});
+  }
+}
+
+setInterval(async () => {
+  const minutes = +S.saverMin || 0;
+  if (saverOn) {
+    fillSaver();
+    if ((await idleSeconds()) < 2) exitSaver();
+    return;
+  }
+  if (!minutes || !current.playing || $("app").classList.contains("hidden")) return;
+  if ((await idleSeconds()) >= minutes * 60) enterSaver();
+}, 1000);
+$("saver").addEventListener("pointerdown", exitSaver);

@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Aura</title>
-  <link rel="stylesheet" href="style.css?v=20261106202214" />
-  <link rel="stylesheet" href="web.css?v=20261106202214" />
+  <link rel="stylesheet" href="style.css?v=20261106205830" />
+  <link rel="stylesheet" href="web.css?v=20261106205830" />
   <link rel="icon" href="logo.png" />
   <meta name="description" content="Aura: a Spotify client with lyrics, stats and a glassy look." />
 </head>
@@ -120,6 +120,7 @@
         <h2 id="np-title">Nothing playing</h2>
         <p id="np-sub" class="muted"></p>
         <p id="np-plays" class="np-plays"></p>
+        <canvas id="viz" class="viz"></canvas>
         <div class="lyrics" id="lyrics"></div>
       </section>
     </div>
@@ -270,6 +271,11 @@
         <div class="row"><div><b>Song as desktop background</b><small>Your Windows wallpaper shows the current song. Your own wallpaper comes back when you turn this off or close Aura.</small></div>
           <span class="switch" data-set="songWallpaper"></span></div>
 
+        <div class="row"><div><b>Visualizer</b><small>Moving bars in the song's colours (an animation: Spotify doesn't let apps read the actual audio)</small></div>
+          <span class="switch" data-set="visualizer"></span></div>
+        <div class="row"><div><b>Screensaver</b><small>When the PC is idle while music plays: full-screen cover, lyrics and visualizer</small></div>
+          <div class="seg" data-seg="saverMin"><button data-v="0">Off</button><button data-v="5">5 min</button><button data-v="10">10 min</button><button data-v="15">15 min</button></div></div>
+
         <div class="group">PLAYBACK</div>
         <div class="row"><div><b>Fade between songs</b><small>Fade the volume out before a skip or the end of a song, and back in on the next</small></div>
           <span class="switch" data-set="fade"></span></div>
@@ -302,7 +308,17 @@
     </div>
   </div>
 
-  <script src="web.js?v=20261106202214"></script>
-  <script src="app.js?v=20261106202214"></script>
+  <div id="saver" class="hidden">
+    <div class="saver-bg" id="saver-bg"></div>
+    <div class="saver-clock" id="saver-clock"></div>
+    <img id="saver-cover" alt="" />
+    <h1 id="saver-title"></h1>
+    <p id="saver-artist"></p>
+    <p class="saver-line" id="saver-line"></p>
+    <canvas id="saver-viz" class="saver-viz"></canvas>
+  </div>
+
+  <script src="web.js?v=20261106205830"></script>
+  <script src="app.js?v=20261106205830"></script>
 </body>
 </html>
