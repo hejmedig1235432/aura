@@ -80,7 +80,7 @@ fn serve(app: AppHandle, listener: TcpListener, key: String) {
             }
             if path.starts_with("/token") {
                 let state = app.state::<App>();
-                let token = tauri::async_runtime::block_on(async { crate::access_token(&*state.sp.lock().await).await });
+                let token = tauri::async_runtime::block_on(async { crate::access_token(&crate::spotify(&state).await).await });
                 match token {
                     Ok(t) => respond(&mut stream, "200 OK", "text/plain", &t),
                     Err(e) => respond(&mut stream, "500 Internal Server Error", "text/plain", &e),

@@ -89,6 +89,11 @@ fn track_id(s: &str) -> Result<TrackId<'static>, String> {
     TrackId::from_id_or_uri(s).map(|t| t.into_static()).map_err(err)
 }
 
+/// A copy of the Spotify client for one request. Copies share the sign-in (token), so the shared
+/// client is only locked for an instant: a slow or stuck Spotify call can't hold up every page.
+async fn spotify(app: &App) -> AuthCodePkceSpotify {
+    app.sp.lock().await.clone()
+}
 /// Current access token, refreshed first if it has expired.
 async fn access_token(sp: &AuthCodePkceSpotify) -> Result<String, String> {
     let expired = sp.get_token().lock().await.unwrap().as_ref().map(|t| t.is_expired());
@@ -127,7 +132,7 @@ async fn get(app: &App, path: &str, query: &[(&str, &str)]) -> Res {
         }
     }
 
-    let token = access_token(&*app.sp.lock().await).await?;
+    let token = access_token(&spotify(&app).await).await?;
     REQUESTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     offline::count_sent();
     // never wait forever: a request Spotify doesn't answer in 20 s counts as failed
@@ -234,7 +239,7 @@ fn forget_cached(app: &App, prefixes: &[&str]) {
 async fn restore_session(app: State<'_, App>) -> Res {
     {
         offline::count_sent();
-    let sp = app.sp.lock().await;
+    let sp = app.sp.lock().await.clone(); // own copy: never hold the shared client during a request
         match sp.read_token_cache(true).await {
             // The Web Playback SDK needs streaming + user-read-email; older tokens lack them.
             Ok(Some(tok)) if tok.scopes.contains("streaming") && tok.scopes.contains("user-read-email") => *sp.get_token().lock().await.unwrap() = Some(tok),
@@ -340,13 +345,13 @@ async fn play_context(app: State<'_, App>, uri: String, start: Option<String>) -
         PlayContextId::Playlist(PlaylistId::from_uri(&uri).map_err(err)?.into_static())
     };
     let offset = start.map(Offset::Uri);
-    let first_try = app.sp.lock().await.start_context_playback(ctx.clone(), None, offset.clone(), None).await;
+    let first_try = spotify(&app).await.start_context_playback(ctx.clone(), None, offset.clone(), None).await;
     if first_try.is_ok() {
         return Ok(Value::Null);
     }
     let device = fallback_device(&app).await?;
     offline::count_sent();
-    let sp = app.sp.lock().await;
+    let sp = app.sp.lock().await.clone(); // own copy: never hold the shared client during a request
     sp.start_context_playback(ctx, Some(&device), offset, None).await.map_err(err)?;
     Ok(Value::Null)
 }
@@ -416,7 +421,7 @@ async fn is_liked(app: State<'_, App>, id: String) -> Res {
 #[tauri::command]
 async fn set_liked(app: State<'_, App>, id: String, on: bool) -> Res {
     let uri = track_id(&id)?.uri();
-    let token = access_token(&*app.sp.lock().await).await?;
+    let token = access_token(&spotify(&app).await).await?;
     let req = if on { app.http.put(format!("{API}/me/library")) } else { app.http.delete(format!("{API}/me/library")) };
     let r = req.bearer_auth(token).query(&[("uris", uri.as_str())]).header("Content-Length", "0").send().await.map_err(err)?;
     if !r.status().is_success() {
@@ -430,7 +435,7 @@ async fn set_liked(app: State<'_, App>, id: String, on: bool) -> Res {
 /// Moves playback to a device. play=false makes it the active device without starting music.
 async fn transfer(app: State<'_, App>, device_id: String, play: Option<bool>) -> Res {
     offline::count_sent();
-    let sp = app.sp.lock().await;
+    let sp = app.sp.lock().await.clone(); // own copy: never hold the shared client during a request
     sp.transfer_playback(&device_id, Some(play.unwrap_or(true))).await.map_err(err)?;
     Ok(Value::Null)
 }
@@ -438,17 +443,17 @@ async fn transfer(app: State<'_, App>, device_id: String, play: Option<bool>) ->
 #[tauri::command]
 async fn control(app: State<'_, App>, action: String) -> Res {
     if action == "play" {
-        if app.sp.lock().await.resume_playback(None, None).await.is_ok() {
+        if spotify(&app).await.resume_playback(None, None).await.is_ok() {
             return Ok(Value::Null);
         }
         let device = fallback_device(&app).await?;
         offline::count_sent();
-    let sp = app.sp.lock().await;
+    let sp = app.sp.lock().await.clone(); // own copy: never hold the shared client during a request
         sp.transfer_playback(&device, Some(true)).await.map_err(err)?;
         return Ok(Value::Null);
     }
     offline::count_sent();
-    let sp = app.sp.lock().await;
+    let sp = app.sp.lock().await.clone(); // own copy: never hold the shared client during a request
     match action.as_str() {
         "pause" => sp.pause_playback(None).await,
         "next" => sp.next_track(None).await,
@@ -462,7 +467,7 @@ async fn control(app: State<'_, App>, action: String) -> Res {
 #[tauri::command]
 async fn set_volume(app: State<'_, App>, percent: u8) -> Res {
     offline::count_sent();
-    let sp = app.sp.lock().await;
+    let sp = app.sp.lock().await.clone(); // own copy: never hold the shared client during a request
     sp.volume(percent.min(100), None).await.map_err(err)?;
     Ok(Value::Null)
 }
@@ -470,7 +475,7 @@ async fn set_volume(app: State<'_, App>, percent: u8) -> Res {
 #[tauri::command]
 async fn seek(app: State<'_, App>, ms: i64) -> Res {
     offline::count_sent();
-    let sp = app.sp.lock().await;
+    let sp = app.sp.lock().await.clone(); // own copy: never hold the shared client during a request
     sp.seek_track(chrono::Duration::milliseconds(ms), None).await.map_err(err)?;
     Ok(Value::Null)
 }
@@ -478,7 +483,7 @@ async fn seek(app: State<'_, App>, ms: i64) -> Res {
 #[tauri::command]
 async fn shuffle(app: State<'_, App>, on: bool) -> Res {
     offline::count_sent();
-    let sp = app.sp.lock().await;
+    let sp = app.sp.lock().await.clone(); // own copy: never hold the shared client during a request
     sp.shuffle(on, None).await.map_err(err)?;
     Ok(Value::Null)
 }
@@ -491,7 +496,7 @@ async fn repeat(app: State<'_, App>, mode: String) -> Res {
         _ => RepeatState::Off,
     };
     offline::count_sent();
-    let sp = app.sp.lock().await;
+    let sp = app.sp.lock().await.clone(); // own copy: never hold the shared client during a request
     sp.repeat(state, None).await.map_err(err)?;
     Ok(Value::Null)
 }
@@ -502,13 +507,13 @@ async fn repeat(app: State<'_, App>, mode: String) -> Res {
 async fn play_playlist(app: State<'_, App>, id: String) -> Res {
     let pid = rspotify::model::PlaylistId::from_id_or_uri(&id).map_err(err)?.into_static();
     let ctx = rspotify::model::PlayContextId::Playlist(pid);
-    let first_try = app.sp.lock().await.start_context_playback(ctx.clone(), None, None, None).await;
+    let first_try = spotify(&app).await.start_context_playback(ctx.clone(), None, None, None).await;
     if first_try.is_ok() {
         return Ok(Value::Null);
     }
     let device = fallback_device(&app).await?;
     offline::count_sent();
-    let sp = app.sp.lock().await;
+    let sp = app.sp.lock().await.clone(); // own copy: never hold the shared client during a request
     sp.start_context_playback(ctx, Some(&device), None, None).await.map_err(err)?;
     Ok(Value::Null)
 }
@@ -517,7 +522,7 @@ async fn play_playlist(app: State<'_, App>, id: String) -> Res {
 async fn add_queue(app: State<'_, App>, uri: String) -> Res {
     let id = PlayableId::Track(track_id(&uri)?);
     offline::count_sent();
-    let sp = app.sp.lock().await;
+    let sp = app.sp.lock().await.clone(); // own copy: never hold the shared client during a request
     sp.add_item_to_queue(id, None).await.map_err(err)?;
     Ok(Value::Null)
 }
@@ -527,14 +532,14 @@ async fn add_queue(app: State<'_, App>, uri: String) -> Res {
 async fn play_uris(app: State<'_, App>, uris: Vec<String>, start: Option<String>) -> Res {
     let ids = uris.iter().map(|u| track_id(u).map(PlayableId::Track)).collect::<Result<Vec<_>, _>>()?;
     let offset = start.map(Offset::Uri);
-    let first_try = app.sp.lock().await.start_uris_playback(ids.clone(), None, offset.clone(), None).await;
+    let first_try = spotify(&app).await.start_uris_playback(ids.clone(), None, offset.clone(), None).await;
     if first_try.is_ok() {
         return Ok(Value::Null);
     }
     // No active device: fall back to any device Spotify is open on.
     let device = fallback_device(&app).await?;
     offline::count_sent();
-    let sp = app.sp.lock().await;
+    let sp = app.sp.lock().await.clone(); // own copy: never hold the shared client during a request
     sp.start_uris_playback(ids, Some(&device), offset, None).await.map_err(err)?;
     Ok(Value::Null)
 }
@@ -803,7 +808,7 @@ fn start_edge_player(app: tauri::AppHandle, state: State<'_, App>) -> Res {
 /// Access token for Spotify's Web Playback SDK running in the page.
 #[tauri::command]
 async fn web_token(app: State<'_, App>) -> Res {
-    Ok(json!(access_token(&*app.sp.lock().await).await?))
+    Ok(json!(access_token(&spotify(&app).await).await?))
 }
 
 /// Lets the page write diagnostics into aura.log.
