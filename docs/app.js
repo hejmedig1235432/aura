@@ -2080,7 +2080,8 @@ async function idleSeconds() {
 }
 
 function fillSaver() {
-  $("saver-cover").src = current.cover ?? "";
+  if (current.cover && $("saver-cover").src !== current.cover) $("saver-cover").src = current.cover;
+  $("saver-cover").classList.toggle("hidden", !current.cover); // no empty box when there's no cover
   $("saver-bg").style.backgroundImage = current.cover ? `url("${current.cover}")` : "";
   $("saver-title").textContent = $("pb-title").textContent;
   $("saver-artist").textContent = $("pb-artist").textContent;
