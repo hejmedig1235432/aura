@@ -383,13 +383,14 @@ function trackView(el, eyebrow, title, tracks) {
         <tr class="trow" data-uri="${esc(trackUri(t))}" data-name="${esc((t.name + " " + artists(t) + " " + (t.album?.name ?? "")).toLowerCase())}">
           <td class="num"><span>${i + 1}</span></td>
           <td class="title"><div class="t-cell"><img src="${esc(t.album?.images?.at(-1)?.url ?? "")}"><div>
-            <b>${t.explicit ? '<span class="explicit">E</span>' : ""}${esc(t.name)}</b><span>${esc(artists(t))}</span></div></div></td>
+            <b>${t.explicit ? '<span class="explicit">E</span>' : ""}${esc(t.name)}</b><span>${artistLinks(t)}</span></div></div></td>
           <td class="album-cell">${esc(t.album?.name ?? "")}</td>
           <td class="plays-col muted">${playsOf(trackUri(t)) || ""}</td>
           <td class="muted">${fmt(durOf(t))}</td>
         </tr>`).join("")}</tbody></table>` : `<div class="empty">Nothing here yet.</div>`}`;
   $("play-all").onclick = () => tracks.length && playList(tracks, null);
   el.querySelector("tbody")?.addEventListener("click", (e) => {
+    if (e.target.closest("[data-artist]")) return; // an artist name opens their page instead
     const row = e.target.closest("tr.trow");
     // Search results aren't a playlist: play only the clicked song.
     if (row) playList(eyebrow === "SEARCH" ? [{ uri: row.dataset.uri }] : viewTracks, row.dataset.uri);
@@ -613,8 +614,9 @@ function onTrackChange(t) {
   onTrackChangeExtras(t);
   const sub = `${artists(t)} — ${t.album?.name ?? ""}`;
   $("np-title").textContent = $("pb-title").textContent = $("mini-title").textContent = t.name;
-  $("np-sub").textContent = sub;
-  $("pb-artist").textContent = $("mini-artist").textContent = artists(t);
+  $("np-sub").innerHTML = `${artistLinks(t)} — ${esc(t.album?.name ?? "")}`; // same text as `sub`, artists clickable
+  $("pb-artist").innerHTML = artistLinks(t);
+  $("mini-artist").textContent = artists(t);
   $("lv-title").textContent = t.name;
   $("lv-artist").textContent = artists(t);
   $("lv-bg").style.backgroundImage = current.cover ? `url("${current.cover}")` : "";
@@ -1606,9 +1608,30 @@ async function renderArtist(el, id) {
         <div class="view-actions"><button class="big-play" id="play-artist">${icon("play")}</button></div>
       </div>
     </div>
+    <div id="artist-songs"><div class="empty">Loading songs…</div></div>
     ${full.length ? `<h3 class="sub-head">Albums</h3><div class="grid">${full.map(albumTile).join("")}</div>` : ""}
     ${singles.length ? `<h3 class="sub-head">Singles and EPs</h3><div class="grid">${singles.map(albumTile).join("")}</div>` : ""}`;
   $("play-artist").onclick = () => withFade(() => withDevice(() => invoke("play_context", { uri: a.uri }))).then(() => setTimeout(refresh, 600));
+  loadArtistSongs(a);
+}
+
+/* Spotify removed "artist top tracks" for apps in 2026, so search for the artist's songs
+   (Spotify returns the most popular first) and keep the ones they're actually credited on. */
+async function loadArtistSongs(a) {
+  const box = $("artist-songs");
+  const r = await invoke("search", { query: `artist:"${a.name}"` }).catch(() => null);
+  if (!box.isConnected) return; // you've moved on to another page meanwhile
+  const songs = normalize(r?.tracks?.items ?? []).filter((t) => (t.artists ?? []).some((x) => x.id === a.id));
+  if (!songs.length) { box.innerHTML = ""; return; }
+  trackView(box, "ARTIST", "Songs", songs);
+}
+
+/** Artist names as links that open the artist's page (several artists: one link each). */
+function artistLinks(t) {
+  return (t.artists ?? []).map((x) => {
+    const id = x.id ?? String(x.uri ?? "").split(":").pop();
+    return id ? `<a class="artist-link" data-artist="${esc(id)}">${esc(x.name)}</a>` : esc(x.name);
+  }).join(", ");
 }
 
 async function renderAlbum(el, id) {
@@ -2120,3 +2143,12 @@ setInterval(async () => {
   if ((await idleSeconds()) >= minutes * 60) enterSaver();
 }, 1000);
 $("saver").addEventListener("pointerdown", exitSaver);
+
+/* ================= artist links outside the song lists ================= */
+// The player bar and now-playing panel show artists as links too; the main view has its own
+// handler (with album tiles), so this one covers everything else.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("[data-artist]");
+  if (!a || a.closest("#view")) return;
+  go({ kind: "artist", id: a.dataset.artist });
+});

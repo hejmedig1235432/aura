@@ -536,3 +536,10 @@ body.karaoke .lyrics p.active .tr { -webkit-text-fill-color: rgba(255,255,255,.7
 #saver .saver-line { color: #fff; font-size: 3.6vh; font-weight: 800; margin-top: 4vh; min-height: 4.6vh; max-width: 80vw; transition: opacity .3s; }
 .saver-viz { position: absolute; left: 6vw; right: 6vw; bottom: 4vh; width: 88vw; height: 10vh; opacity: .55; }
 .saver-clock { position: absolute; top: 4vh; right: 5vw; font-size: 4vh; font-weight: 300; color: rgba(255,255,255,.75); }
+
+/* ---------- clickable artist names ---------- */
+.artist-link { color: inherit; cursor: pointer; text-decoration: none; }
+.artist-link:hover { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+#artist-songs .view-head { padding-top: 4px; }
+#artist-songs .view-head .eyebrow { display: none; }
+#artist-songs .view-head h1 { font-size: 20px; margin-bottom: 12px; }
