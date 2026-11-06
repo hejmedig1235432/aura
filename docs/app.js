@@ -1914,7 +1914,7 @@ async function renderWrapped(el, range) {
     .filter(([, x]) => x.count >= 3 && now - new Date(x.last_played) > 30 * 86400000)
     .sort((a, b) => b[1].count - a[1].count).slice(0, 10);
 
-  const label = range === "week" ? "this week" : "this month";
+  const label = range === "week" ? "in the last 7 days" : "in the last 30 days";
   const songRow = ([uri, n], i) => `
     <div class="crow" data-uri="${esc(uri)}"><span class="rank">${i + 1}</span><img src="${esc(t(uri).image)}">
       <div><b>${esc(t(uri).name)}</b><span>${esc(t(uri).artists)}</span></div><span class="count">${n}×</span></div>`;
