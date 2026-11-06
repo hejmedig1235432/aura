@@ -15,6 +15,9 @@ pub struct Track {
     pub image: String,
     pub count: u32,
     pub last_played: String,
+    /// Song length, for "minutes listened" in Wrapped (0 for plays saved before this existed).
+    #[serde(default)]
+    pub duration_ms: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -80,6 +83,7 @@ pub fn merge(store: &mut Store, recent: &Value) -> Result<usize, String> {
         entry.image = t["album"]["images"].as_array().and_then(|i| i.last()).and_then(|i| i["url"].as_str()).unwrap_or_default().to_string();
         entry.count += 1;
         entry.last_played = played_at.to_string();
+        entry.duration_ms = t["duration_ms"].as_u64().unwrap_or(entry.duration_ms);
         store.history.push(Play { uri: uri.to_string(), at: played_at.to_string() });
         store.newest = played_at.to_string();
         added += 1;

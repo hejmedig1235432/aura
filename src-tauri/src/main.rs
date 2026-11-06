@@ -22,6 +22,7 @@ mod edge;
 mod hotkeys;
 mod updates;
 mod desk;
+mod offline;
 mod wallpaper;
 mod lyrics_index;
 mod plays;
@@ -109,15 +110,18 @@ async fn get(app: &App, path: &str, query: &[(&str, &str)]) -> Res {
     let cached = app.cache.lock().unwrap().get(&key).cloned();
     if let Some((at, v)) = &cached {
         if at.elapsed() < fresh_for {
+            offline::count_saved();
             return Ok(v.clone());
         }
     }
+    // Older answer to fall back on: this run's cache, else the offline copy on disk.
+    let fallback = cached.map(|(_, v)| v).or_else(|| if offline::keeps(path) { offline::recall(&key) } else { None });
     // While Spotify has asked us to slow down, don't send anything; serve older answers instead.
     if let Some(until) = *app.blocked_until.lock().unwrap() {
         let now = std::time::Instant::now();
         if now < until {
-            return match cached {
-                Some((_, v)) => Ok(v),
+            return match fallback {
+                Some(v) => { offline::count_saved(); Ok(v) }
                 None => Err(format!("RATE_LIMITED {}", (until - now).as_secs().max(1))),
             };
         }
@@ -125,7 +129,12 @@ async fn get(app: &App, path: &str, query: &[(&str, &str)]) -> Res {
 
     let token = access_token(&*app.sp.lock().await).await?;
     REQUESTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let r = app.http.get(format!("{API}{path}")).bearer_auth(token).query(query).send().await.map_err(err)?;
+    offline::count_sent();
+    let r = match app.http.get(format!("{API}{path}")).bearer_auth(token).query(query).send().await {
+        Ok(r) => r,
+        // no internet: the offline copy is better than an error
+        Err(e) => return fallback.ok_or_else(|| err(e)),
+    };
     let status = r.status();
     if status == reqwest::StatusCode::NO_CONTENT {
         return Ok(Value::Null);
@@ -135,10 +144,15 @@ async fn get(app: &App, path: &str, query: &[(&str, &str)]) -> Res {
     if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
         *app.blocked_until.lock().unwrap() = Some(std::time::Instant::now() + std::time::Duration::from_secs(retry_after));
         log::info!("aura: Spotify rate limit, pausing requests for {retry_after}s");
-        return match cached {
-            Some((_, v)) => Ok(v),
+        return match fallback {
+            Some(v) => Ok(v),
             None => Err(format!("RATE_LIMITED {retry_after}")),
         };
+    }
+    if status.is_server_error() {
+        if let Some(v) = fallback {
+            return Ok(v); // Spotify hiccup: show the saved copy
+        }
     }
     if !status.is_success() {
         return Err(format!("Spotify {status}: {body}"));
@@ -147,10 +161,26 @@ async fn get(app: &App, path: &str, query: &[(&str, &str)]) -> Res {
         return Ok(Value::Null);
     }
     let v: Value = serde_json::from_str(&body).map_err(err)?;
+    if offline::keeps(path) {
+        offline::remember(&key, &v);
+    }
     if !fresh_for.is_zero() {
         app.cache.lock().unwrap().insert(key, (std::time::Instant::now(), v.clone()));
     }
     Ok(v)
+}
+
+/// For the request meter in Settings.
+#[tauri::command]
+fn request_stats(app: State<'_, App>) -> Res {
+    let blocked = app.blocked_until.lock().unwrap().map(|u| u.saturating_duration_since(std::time::Instant::now()).as_secs()).unwrap_or(0);
+    Ok(offline::stats(blocked))
+}
+
+/// This build's version, for "What's new" after an update.
+#[tauri::command]
+fn app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
 }
 
 /// Spotify read requests actually sent (cache hits don't count), logged every 10 minutes.
@@ -189,7 +219,8 @@ fn forget_cached(app: &App, prefixes: &[&str]) {
 #[tauri::command]
 async fn restore_session(app: State<'_, App>) -> Res {
     {
-        let sp = app.sp.lock().await;
+        offline::count_sent();
+    let sp = app.sp.lock().await;
         match sp.read_token_cache(true).await {
             // The Web Playback SDK needs streaming + user-read-email; older tokens lack them.
             Ok(Some(tok)) if tok.scopes.contains("streaming") && tok.scopes.contains("user-read-email") => *sp.get_token().lock().await.unwrap() = Some(tok),
@@ -300,6 +331,7 @@ async fn play_context(app: State<'_, App>, uri: String, start: Option<String>) -
         return Ok(Value::Null);
     }
     let device = fallback_device(&app).await?;
+    offline::count_sent();
     let sp = app.sp.lock().await;
     sp.start_context_playback(ctx, Some(&device), offset, None).await.map_err(err)?;
     Ok(Value::Null)
@@ -383,6 +415,7 @@ async fn set_liked(app: State<'_, App>, id: String, on: bool) -> Res {
 #[tauri::command]
 /// Moves playback to a device. play=false makes it the active device without starting music.
 async fn transfer(app: State<'_, App>, device_id: String, play: Option<bool>) -> Res {
+    offline::count_sent();
     let sp = app.sp.lock().await;
     sp.transfer_playback(&device_id, Some(play.unwrap_or(true))).await.map_err(err)?;
     Ok(Value::Null)
@@ -395,10 +428,12 @@ async fn control(app: State<'_, App>, action: String) -> Res {
             return Ok(Value::Null);
         }
         let device = fallback_device(&app).await?;
-        let sp = app.sp.lock().await;
+        offline::count_sent();
+    let sp = app.sp.lock().await;
         sp.transfer_playback(&device, Some(true)).await.map_err(err)?;
         return Ok(Value::Null);
     }
+    offline::count_sent();
     let sp = app.sp.lock().await;
     match action.as_str() {
         "pause" => sp.pause_playback(None).await,
@@ -412,6 +447,7 @@ async fn control(app: State<'_, App>, action: String) -> Res {
 
 #[tauri::command]
 async fn set_volume(app: State<'_, App>, percent: u8) -> Res {
+    offline::count_sent();
     let sp = app.sp.lock().await;
     sp.volume(percent.min(100), None).await.map_err(err)?;
     Ok(Value::Null)
@@ -419,6 +455,7 @@ async fn set_volume(app: State<'_, App>, percent: u8) -> Res {
 
 #[tauri::command]
 async fn seek(app: State<'_, App>, ms: i64) -> Res {
+    offline::count_sent();
     let sp = app.sp.lock().await;
     sp.seek_track(chrono::Duration::milliseconds(ms), None).await.map_err(err)?;
     Ok(Value::Null)
@@ -426,6 +463,7 @@ async fn seek(app: State<'_, App>, ms: i64) -> Res {
 
 #[tauri::command]
 async fn shuffle(app: State<'_, App>, on: bool) -> Res {
+    offline::count_sent();
     let sp = app.sp.lock().await;
     sp.shuffle(on, None).await.map_err(err)?;
     Ok(Value::Null)
@@ -438,6 +476,7 @@ async fn repeat(app: State<'_, App>, mode: String) -> Res {
         "context" => RepeatState::Context,
         _ => RepeatState::Off,
     };
+    offline::count_sent();
     let sp = app.sp.lock().await;
     sp.repeat(state, None).await.map_err(err)?;
     Ok(Value::Null)
@@ -454,6 +493,7 @@ async fn play_playlist(app: State<'_, App>, id: String) -> Res {
         return Ok(Value::Null);
     }
     let device = fallback_device(&app).await?;
+    offline::count_sent();
     let sp = app.sp.lock().await;
     sp.start_context_playback(ctx, Some(&device), None, None).await.map_err(err)?;
     Ok(Value::Null)
@@ -462,6 +502,7 @@ async fn play_playlist(app: State<'_, App>, id: String) -> Res {
 #[tauri::command]
 async fn add_queue(app: State<'_, App>, uri: String) -> Res {
     let id = PlayableId::Track(track_id(&uri)?);
+    offline::count_sent();
     let sp = app.sp.lock().await;
     sp.add_item_to_queue(id, None).await.map_err(err)?;
     Ok(Value::Null)
@@ -478,6 +519,7 @@ async fn play_uris(app: State<'_, App>, uris: Vec<String>, start: Option<String>
     }
     // No active device: fall back to any device Spotify is open on.
     let device = fallback_device(&app).await?;
+    offline::count_sent();
     let sp = app.sp.lock().await;
     sp.start_uris_playback(ids, Some(&device), offset, None).await.map_err(err)?;
     Ok(Value::Null)
@@ -841,13 +883,14 @@ fn main() {
             artist, album, play_context, hotkeys::show_overlay,
             updates::check_update, updates::install_update,
             wallpaper::set_song_wallpaper, wallpaper::restore_wallpaper,
-            desk::toggle_desk, desk::desk_hot
+            desk::toggle_desk, desk::desk_hot, request_stats, app_version
         ])
         .build(tauri::generate_context!())
         .expect("error while building Aura")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 let _ = wallpaper::restore_now(); // give you your own wallpaper back
+                offline::flush();
                 if let Some(mut child) = app.state::<App>().edge.lock().unwrap().take() {
                     edge::stop(&mut child);
                 }

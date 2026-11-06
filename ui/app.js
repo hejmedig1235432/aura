@@ -292,6 +292,7 @@ async function render(view) {
     if (view.kind === "queue") return renderQueue(el);
     if (view.kind === "stats") return renderStats(el, view.range ?? "short_term");
     if (view.kind === "history") return renderHistory(el);
+    if (view.kind === "wrapped") return renderWrapped(el, view.range ?? "week");
     if (view.kind === "artist") return renderArtist(el, view.id);
     if (view.kind === "album") return renderAlbum(el, view.id);
     if (view.kind === "search") {
@@ -969,6 +970,7 @@ const playsOf = (uri) => playCounts[uri]?.count ?? 0;
 async function loadCounts() {
   await invoke("sync_plays").catch((e) => backOff(e));
   playCounts = (await invoke("play_counts").catch(() => null)) ?? playCounts;
+  checkMilestones();
   if (current.uri) showPlays(current.uri);
   $$("tr.trow").forEach((r) => {
     const cell = r.querySelector(".plays-col");
@@ -1825,3 +1827,159 @@ onTrackChangeExtras = (t) => {
   onTrackChangeExtrasForWallpaper(t);
   setTimeout(() => updateWallpaper(), 600); // after the new cover is known
 };
+
+/* ================= request meter (Settings) ================= */
+// Spotify doesn't publish the daily limit, so this shows how many requests Aura made today,
+// how many it answered from its own copies instead, and whether Spotify is pausing it now.
+
+async function updateMeter() {
+  const s = await invoke("request_stats").catch(() => null);
+  if (!s) return;
+  const level = s.blockedSecs > 0 ? "paused" : s.sent < 600 ? "light" : s.sent < 1500 ? "moderate" : "heavy";
+  const pill = $("req-pill");
+  pill.textContent = { paused: "Paused", light: "Light", moderate: "Moderate", heavy: "Heavy" }[level];
+  pill.className = `meter-pill ${level}`;
+  const until = s.blockedSecs > 0
+    ? ` · Spotify is pausing Aura until ${new Date(Date.now() + s.blockedSecs * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`
+    : "";
+  $("req-meter").textContent = `${s.sent} sent · ${s.saved} answered from Aura's own copies${s.offlineItems ? ` · ${s.offlineItems} pages saved offline` : ""}${until}`;
+}
+$("btn-settings").addEventListener("pointerdown", () => setTimeout(updateMeter, 50));
+setInterval(() => { if (!$("settings-backdrop").classList.contains("hidden")) updateMeter(); }, 15000);
+
+/* ================= "What's new" after an update ================= */
+
+async function showWhatsNew() {
+  const version = await invoke("app_version").catch(() => null);
+  if (!version || version === "web") return;
+  let last = null;
+  try { last = localStorage.getItem("aura.lastVersion"); localStorage.setItem("aura.lastVersion", version); } catch {}
+  if (!last || last === version) return; // first run, or nothing new
+  let notes = "";
+  try {
+    const r = await fetch(`https://api.github.com/repos/hejmedig1235432/aura/releases/tags/v${version}`);
+    if (r.ok) notes = (await r.json()).body ?? "";
+  } catch {}
+  const box = document.createElement("div");
+  box.id = "whatsnew";
+  box.innerHTML = `<div class="whatsnew-card">
+      <div class="eyebrow">UPDATED TO ${esc(version)}</div>
+      <h2>What's new in Aura</h2>
+      <p>${esc(notes || "Bug fixes and improvements.").replace(/\n/g, "<br>")}</p>
+      <button class="pill accent" id="whatsnew-ok">Nice</button>
+    </div>`;
+  document.body.append(box);
+  const close = () => box.remove();
+  $("whatsnew-ok").onclick = close;
+  box.onclick = (e) => { if (e.target === box) close(); };
+}
+setTimeout(showWhatsNew, 2500);
+
+/* ================= Wrapped: weekly / monthly recap ================= */
+
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+async function renderWrapped(el, range) {
+  await loadCounts();
+  const { history = [], tracks = {} } = (await invoke("play_history").catch(() => null)) ?? {};
+  const now = Date.now(), span = (range === "week" ? 7 : 30) * 86400000;
+  const all = history.map((p) => ({ uri: p.uri, at: new Date(p.at) }));
+  const inRange = all.filter((p) => now - p.at < span);
+  const before = all.filter((p) => now - p.at >= span && now - p.at < 2 * span);
+  const t = (uri) => tracks[uri] ?? { name: "Unknown", artists: "", image: "", duration_ms: 0 };
+
+  const minutes = Math.round(inRange.reduce((s, p) => s + (t(p.uri).duration_ms || 0), 0) / 60000);
+  const countBy = (keyOf) => {
+    const m = new Map();
+    for (const p of inRange) for (const k of [].concat(keyOf(p))) if (k) m.set(k, (m.get(k) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  };
+  const topSongs = countBy((p) => p.uri).slice(0, 5);
+  const topArtists = countBy((p) => t(p.uri).artists.split(", ")).slice(0, 5);
+  const days = countBy((p) => dayKey(p.at));
+  const firstSeen = new Map();
+  for (const p of [...all].sort((a, b) => a.at - b.at)) if (!firstSeen.has(p.uri)) firstSeen.set(p.uri, p.at);
+  const newFinds = [...new Set(inRange.map((p) => p.uri))].filter((u) => now - firstSeen.get(u) < span);
+  const change = before.length ? Math.round(((inRange.length - before.length) / before.length) * 100) : null;
+
+  // listening clock: plays per weekday and hour
+  const grid = Array.from({ length: 7 }, () => Array(24).fill(0));
+  for (const p of inRange) grid[(p.at.getDay() + 6) % 7][p.at.getHours()]++;
+  const peak = Math.max(1, ...grid.flat());
+  let best = [0, 0];
+  grid.forEach((row, d) => row.forEach((n, h) => { if (n > grid[best[0]][best[1]]) best = [d, h]; }));
+
+  // Rediscover: songs you played a lot, not heard for 30+ days
+  const forgotten = Object.entries(tracks)
+    .filter(([, x]) => x.count >= 3 && now - new Date(x.last_played) > 30 * 86400000)
+    .sort((a, b) => b[1].count - a[1].count).slice(0, 10);
+
+  const label = range === "week" ? "in the last 7 days" : "in the last 30 days";
+  const songRow = ([uri, n], i) => `
+    <div class="crow" data-uri="${esc(uri)}"><span class="rank">${i + 1}</span><img src="${esc(t(uri).image)}">
+      <div><b>${esc(t(uri).name)}</b><span>${esc(t(uri).artists)}</span></div><span class="count">${n}×</span></div>`;
+
+  el.innerHTML = `
+    <div class="view-head">
+      <div class="eyebrow">YOUR RECAP</div><h1>Wrapped</h1>
+      <div class="seg wrapped-tabs">
+        <button data-range="week" class="${range === "week" ? "sel" : ""}">Last 7 days</button>
+        <button data-range="month" class="${range === "month" ? "sel" : ""}">Last 30 days</button>
+      </div>
+    </div>
+    ${inRange.length ? `
+    <div class="stat-cards">
+      <div class="stat"><b>${inRange.length}</b><span>plays ${label}${change != null ? ` · ${change >= 0 ? "▲" : "▼"} ${Math.abs(change)}%` : ""}</span></div>
+      <div class="stat"><b>${minutes}</b><span>minutes listened</span></div>
+      <div class="stat"><b>${newFinds.length}</b><span>new songs found</span></div>
+      <div class="stat"><b>${days[0] ? new Date(`${days[0][0]}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) : "–"}</b><span>busiest day${days[0] ? ` (${days[0][1]} plays)` : ""}</span></div>
+    </div>
+    <div class="wrapped-cols">
+      <div><h3 class="sub-head">Top songs</h3><div class="counted">${topSongs.map(songRow).join("")}</div></div>
+      <div><h3 class="sub-head">Top artists</h3><div class="counted">${topArtists.map(([a, n], i) => `
+        <div class="crow"><span class="rank">${i + 1}</span><div><b>${esc(a)}</b></div><span class="count">${n}×</span></div>`).join("")}</div></div>
+    </div>
+    <h3 class="sub-head">Listening clock <small class="muted">· you listen most on ${DAYS[best[0]]}s around ${String(best[1]).padStart(2, "0")}:00</small></h3>
+    <div class="clock">
+      <div></div>${Array.from({ length: 24 }, (_, h) => `<span class="clock-h">${h % 3 ? "" : h}</span>`).join("")}
+      ${grid.map((row, d) => `<span class="clock-d">${DAYS[d]}</span>${row.map((n, h) =>
+        `<i style="--a:${n ? 0.15 + 0.85 * (n / peak) : 0}" title="${DAYS[d]} ${h}:00 · ${n} plays"></i>`).join("")}`).join("")}
+    </div>
+    ${newFinds.length ? `<h3 class="sub-head">New finds ${label}</h3>
+      <div class="counted">${newFinds.slice(0, 8).map((u) => songRow([u, inRange.filter((p) => p.uri === u).length], newFinds.indexOf(u))).join("")}</div>` : ""}
+    ` : `<div class="empty">No plays recorded ${label} yet. Aura records what you listen to (on any device) every few minutes.</div>`}
+    <h3 class="sub-head">Rediscover <small class="muted">· songs you loved but haven't played in 30+ days</small></h3>
+    <div class="counted">${forgotten.map(([uri, x], i) => `
+      <div class="crow" data-uri="${esc(uri)}"><span class="rank">${i + 1}</span><img src="${esc(x.image)}">
+        <div><b>${esc(x.name)}</b><span>${esc(x.artists)} · last played ${new Date(x.last_played).toLocaleDateString()}</span></div>
+        <span class="count">${x.count}×</span></div>`).join("") ||
+      `<div class="empty">Nothing forgotten yet. Songs show up here once you've played them a few times and then not for a month.</div>`}</div>`;
+
+  el.querySelector(".wrapped-tabs").onclick = (e) => { const r = e.target.dataset.range; if (r) go({ kind: "wrapped", range: r }); };
+  el.onclick = (e) => {
+    const row = e.target.closest(".crow[data-uri]");
+    if (row) playList([{ uri: row.dataset.uri }], row.dataset.uri);
+  };
+}
+
+/* ================= milestones ================= */
+// "🎉 25th play of Softcore" when a song reaches 10, 25, 50, 100, ... plays.
+
+const MILESTONES = [10, 25, 50, 100, 250, 500, 1000];
+const ordinal = (n) => n + (["th", "st", "nd", "rd"][(n % 100 > 10 && n % 100 < 14) ? 0 : n % 10] ?? "th");
+let milestonesSeen = null;
+function checkMilestones() {
+  const first = milestonesSeen === null;
+  if (first) { try { milestonesSeen = new Set(JSON.parse(localStorage.getItem("aura.milestones") || "null") ?? []); } catch { milestonesSeen = new Set(); } }
+  const quiet = first && !localStorage.getItem("aura.milestones"); // first time ever: don't flood with old milestones
+  const fresh = [];
+  for (const [uri, x] of Object.entries(playCounts)) {
+    for (const m of MILESTONES) {
+      const key = `${uri}:${m}`;
+      if (x.count >= m && !milestonesSeen.has(key)) { milestonesSeen.add(key); if (!quiet) fresh.push([m, x.name]); }
+    }
+  }
+  try { localStorage.setItem("aura.milestones", JSON.stringify([...milestonesSeen])); } catch {}
+  fresh.sort((a, b) => b[0] - a[0]);
+  if (fresh[0]) toast(`🎉 ${ordinal(fresh[0][0])} play of ${fresh[0][1]}!`);
+}

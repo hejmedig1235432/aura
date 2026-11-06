@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Aura</title>
-  <link rel="stylesheet" href="style.css?v=20261104150851" />
-  <link rel="stylesheet" href="web.css?v=20261104150851" />
+  <link rel="stylesheet" href="style.css?v=20261106202013" />
+  <link rel="stylesheet" href="web.css?v=20261106202013" />
   <link rel="icon" href="logo.png" />
   <meta name="description" content="Aura: a Spotify client with lyrics, stats and a glassy look." />
 </head>
@@ -44,6 +44,7 @@
       <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
       <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
       <symbol id="i-widget" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><rect x="6" y="7" width="5" height="5" rx="1"/><path d="M13 8h5M13 11h3M8 20h8"/></symbol>
+      <symbol id="i-gift" viewBox="0 0 24 24"><rect x="3.5" y="9" width="17" height="11" rx="1.5"/><path d="M3 9h18M12 9v11M12 9c-1.5-3.5-6-4-6-1.5S10 9 12 9zM12 9c1.5-3.5 6-4 6-1.5S14 9 12 9z"/></symbol>
       <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-3 4h10l-3-4V3M12 13v8"/></symbol>
       <symbol id="i-dots" viewBox="0 0 24 24"><circle class="fill" cx="5" cy="12" r="1.6"/><circle class="fill" cx="12" cy="12" r="1.6"/><circle class="fill" cx="19" cy="12" r="1.6"/></symbol>
     </defs>
@@ -101,6 +102,7 @@
           <a data-view="queue"><span class="nav-ic"><svg><use href="#i-queue"/></svg></span>Queue</a>
           <a data-view="stats"><span class="nav-ic"><svg><use href="#i-chart"/></svg></span>Stats</a>
           <a data-view="history"><span class="nav-ic"><svg><use href="#i-cal"/></svg></span>History</a>
+          <a data-view="wrapped"><span class="nav-ic"><svg><use href="#i-gift"/></svg></span>Wrapped</a>
         </nav>
         <div class="section-label">PLAYLISTS <span id="pl-count"></span></div>
         <div id="playlists"></div>
@@ -282,6 +284,8 @@
           <input class="hex wide" id="discord-id" placeholder="1234567890" /></div>
 
         <div class="group">SYSTEM</div>
+        <div class="row"><div><b>Spotify requests today</b><small id="req-meter">Counting…</small></div>
+          <span class="meter-pill" id="req-pill">–</span></div>
         <div class="row"><div><b>Updates</b><small id="update-info">Aura checks for new versions when it starts</small></div>
           <button class="pill" id="check-updates">Check for updates</button></div>
         <div class="row"><div><b>Open on startup</b><small>Launch Aura when you sign in to Windows</small></div>
@@ -298,7 +302,7 @@
     </div>
   </div>
 
-  <script src="web.js?v=20261104150851"></script>
-  <script src="app.js?v=20261104150851"></script>
+  <script src="web.js?v=20261106202013"></script>
+  <script src="app.js?v=20261106202013"></script>
 </body>
 </html>

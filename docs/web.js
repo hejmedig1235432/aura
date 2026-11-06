@@ -85,6 +85,11 @@
   /* ---------- Spotify Web API with caching and rate-limit pauses ---------- */
   const cache = new Map();
   let blockedUntil = 0;
+  // offline copy of library pages (this browser), used when Spotify can't answer
+  const keeps = (p) => ["/me", "/me/tracks", "/me/playlists", "/me/top/tracks", "/me/top/artists"].includes(p) || /^\/(playlists|artists|albums)\//.test(p);
+  let offline = load("aura.web.offline", {});
+  const usage = load("aura.web.usage", {});
+  const bump = (kind) => { const d = new Date().toDateString(); if (usage.day !== d) { usage.day = d; usage.sent = 0; usage.saved = 0; } usage[kind]++; store("aura.web.usage", usage); };
   const ttl = (path) =>
     ["/me/player", "/me/player/queue", "/me/player/recently-played"].includes(path) ? 0
     : path === "/me/player/devices" ? 5
@@ -99,28 +104,35 @@
     const key = `${path}?${qs}`;
     const fresh = method === "GET" ? ttl(path) * 1000 : 0;
     const hit = cache.get(key);
-    if (hit && Date.now() - hit.at < fresh) return hit.v;
+    if (hit && Date.now() - hit.at < fresh) { bump("saved"); return hit.v; }
+    const fallback = hit?.v ?? (keeps(path) ? offline[key] : undefined);
     if (Date.now() < blockedUntil) {
-      if (hit) return hit.v;
+      if (fallback !== undefined) { bump("saved"); return fallback; }
       throw `RATE_LIMITED ${Math.ceil((blockedUntil - Date.now()) / 1000)}`;
     }
-    const r = await fetch(`${API}${path}${qs ? "?" + qs : ""}`, {
-      method,
-      headers: { Authorization: `Bearer ${await accessToken()}`, ...(body ? { "Content-Type": "application/json" } : {}) },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    bump("sent");
+    let r;
+    try {
+      r = await fetch(`${API}${path}${qs ? "?" + qs : ""}`, {
+        method,
+        headers: { Authorization: `Bearer ${await accessToken()}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch (e) { if (fallback !== undefined) return fallback; throw e; } // offline: show the saved copy
     if (r.status === 429) {
       const wait = +r.headers.get("retry-after") || 30;
       blockedUntil = Date.now() + wait * 1000;
-      if (hit) return hit.v;
+      if (fallback !== undefined) return fallback;
       throw `RATE_LIMITED ${wait}`;
     }
+    if (r.status >= 500 && fallback !== undefined) return fallback;
     const text = await r.text();
     if (!r.ok) throw `Spotify ${r.status}: ${text}`;
     // some player commands answer with plain text (not JSON); keep it as it is then
     let v = null;
     if (text.trim()) { try { v = JSON.parse(text); } catch { v = text; } }
     if (fresh) cache.set(key, { at: Date.now(), v });
+    if (method === "GET" && keeps(path)) { offline[key] = v; store("aura.web.offline", offline); }
     return v;
   }
   const get = (path, query) => api("GET", path, query);
@@ -157,6 +169,7 @@
       e.image = t.album?.images?.at(-1)?.url ?? "";
       e.count++;
       e.last_played = it.played_at;
+      e.duration_ms = t.duration_ms ?? e.duration_ms ?? 0;
       plays.history.push({ uri, at: it.played_at });
       plays.newest = it.played_at;
       added++;
@@ -297,6 +310,8 @@
     },
 
     check_update: () => ({ version: null, current: "web" }),
+    app_version: () => "web",
+    request_stats: () => ({ sent: usage.day === new Date().toDateString() ? usage.sent : 0, saved: usage.day === new Date().toDateString() ? usage.saved : 0, blockedSecs: Math.max(0, Math.ceil((blockedUntil - Date.now()) / 1000)), offlineItems: Object.keys(offline).length }),
     report: ({ msg }) => console.info("[aura]", msg),
   };
   // desktop-only: nothing to do in a browser

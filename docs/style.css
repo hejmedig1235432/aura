@@ -490,3 +490,32 @@ body.karaoke .lyrics p.active .tr { -webkit-text-fill-color: rgba(255,255,255,.7
   animation: pop .14s ease-out;
   transform-origin: bottom right;
 }
+
+/* ---------- request meter ---------- */
+.meter-pill { font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 99px; background: rgba(255,255,255,.08); white-space: nowrap; }
+.meter-pill.light { background: rgba(52, 211, 153, .18); color: #6ee7b7; }
+.meter-pill.moderate { background: rgba(250, 204, 21, .16); color: #fde047; }
+.meter-pill.heavy { background: rgba(249, 115, 22, .18); color: #fdba74; }
+.meter-pill.paused { background: rgba(244, 63, 94, .18); color: #fda4af; }
+
+/* ---------- what's new ---------- */
+#whatsnew { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(0,0,0,.45); animation: fade .2s ease; }
+.whatsnew-card {
+  width: min(480px, 90vw); padding: 26px 26px 22px; border-radius: 18px;
+  background: rgba(20, 22, 30, .97); border: 1px solid var(--line); box-shadow: 0 30px 80px rgba(0,0,0,.6);
+  animation: pop .18s ease-out;
+}
+.whatsnew-card h2 { font-size: 24px; margin: 6px 0 12px; }
+.whatsnew-card p { color: rgba(255,255,255,.8); line-height: 1.6; margin-bottom: 20px; max-height: 50vh; overflow: auto; }
+
+/* ---------- wrapped ---------- */
+.wrapped-tabs { margin-top: 4px; }
+.wrapped-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.clock {
+  display: grid; grid-template-columns: 40px repeat(24, 1fr); gap: 3px; padding: 0 24px 24px; align-items: center;
+}
+.clock i { aspect-ratio: 1; border-radius: 4px; background: rgba(255,255,255,.05); position: relative; overflow: hidden; }
+.clock i::after { content: ""; position: absolute; inset: 0; background: var(--accent); opacity: var(--a); }
+.clock-d { font-size: 11px; color: var(--muted); }
+.clock-h { font-size: 10px; color: var(--muted); text-align: center; }
+@media (max-width: 900px) { .wrapped-cols { grid-template-columns: 1fr; } }
