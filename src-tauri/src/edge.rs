@@ -117,6 +117,7 @@ pub fn start(app: &AppHandle) -> Result<Child, String> {
         std::thread::spawn(move || serve(app, listener, key));
     }
     let profile = dirs::config_dir().unwrap_or_default().join("prism").join("edge-player");
+    close_leftovers();
     Command::new(edge)
         .arg(format!("--app={url}"))
         .arg(format!("--user-data-dir={}", profile.display()))
@@ -171,6 +172,19 @@ unsafe fn hide_once() {
         1
     }
     EnumWindows(Some(visit), 0);
+}
+
+/// Closes Edge player windows left over from an earlier Aura run (e.g. one that was closed by
+/// an update or crashed). Edge allows one window per profile: if an old one is still open, a
+/// new launch hands over to it and exits, and Aura ends up with no working player.
+pub fn close_leftovers() {
+    let script = "Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | \
+        Where-Object { $_.CommandLine -like '*prism\\edge-player*' } | \
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }";
+    let _ = Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .no_window()
+        .output();
 }
 
 /// Closes the Edge window and its child processes.

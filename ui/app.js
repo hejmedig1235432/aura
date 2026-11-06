@@ -286,6 +286,13 @@ async function render(view) {
   const el = $("view");
   el.onclick = null; // a page's own click handler shouldn't leak into the next page
   el.innerHTML = `<div class="empty">Loading…</div>`;
+  // if Spotify never answers, offer a retry instead of "Loading…" forever
+  const loading = el.firstElementChild;
+  setTimeout(() => {
+    if (!loading.isConnected) return; // the page loaded (or you went elsewhere)
+    loading.innerHTML = `Spotify isn't answering right now. <button class="pill" id="retry-view">Try again</button>`;
+    $("retry-view").onclick = () => render(view);
+  }, 25000);
   el.scrollTop = 0;
   try {
     if (view.kind === "home") return renderHome(el);

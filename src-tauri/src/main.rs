@@ -130,7 +130,9 @@ async fn get(app: &App, path: &str, query: &[(&str, &str)]) -> Res {
     let token = access_token(&*app.sp.lock().await).await?;
     REQUESTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     offline::count_sent();
-    let r = match app.http.get(format!("{API}{path}")).bearer_auth(token).query(query).send().await {
+    // never wait forever: a request Spotify doesn't answer in 20 s counts as failed
+    let send = app.http.get(format!("{API}{path}")).bearer_auth(token).query(query).timeout(std::time::Duration::from_secs(20)).send();
+    let r = match send.await {
         Ok(r) => r,
         // no internet: the offline copy is better than an error
         Err(e) => return fallback.ok_or_else(|| err(e)),
