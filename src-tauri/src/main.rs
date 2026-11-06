@@ -68,7 +68,8 @@ fn build_client() -> AuthCodePkceSpotify {
     };
     let cache = dirs::config_dir().unwrap_or_default().join("prism").join("token.json");
     let _ = std::fs::create_dir_all(cache.parent().unwrap());
-    let config = Config { token_cached: true, token_refreshing: true, cache_path: cache, ..Default::default() };
+    // token_refreshing off: rspotify's own renewal can deadlock; Aura renews it (access_token)
+    let config = Config { token_cached: true, token_refreshing: false, cache_path: cache, ..Default::default() };
     AuthCodePkceSpotify::with_config(Credentials::new_pkce(&id), oauth, config)
 }
 
@@ -92,19 +93,62 @@ fn track_id(s: &str) -> Result<TrackId<'static>, String> {
 /// A copy of the Spotify client for one request. Copies share the sign-in (token), so the shared
 /// client is only locked for an instant: a slow or stuck Spotify call can't hold up every page.
 async fn spotify(app: &App) -> AuthCodePkceSpotify {
-    app.sp.lock().await.clone()
+    let sp = app.sp.lock().await.clone();
+    // renew the sign-in first if needed, so rspotify's own calls never find it expired
+    let _ = access_token(&sp).await;
+    sp
 }
-/// Current access token, refreshed first if it has expired.
+
+/// Current access token, renewed first if it has expired.
+///
+/// Aura renews the sign-in itself instead of using rspotify's refresh_token(): that one holds
+/// the token lock while waiting for it again and hangs forever, which left every request
+/// stuck on "Loading…" an hour after signing in. Renewals are one at a time and time-limited,
+/// and the new sign-in is saved to token.json.
 async fn access_token(sp: &AuthCodePkceSpotify) -> Result<String, String> {
-    let expired = sp.get_token().lock().await.unwrap().as_ref().map(|t| t.is_expired());
-    match expired {
-        None => return Err("not signed in".into()),
-        Some(true) => sp.refresh_token().await.map_err(err)?,
-        Some(false) => {}
+    static RENEWING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let current = sp.get_token().lock().await.unwrap().clone();
+    let Some(token) = current else { return Err("not signed in".into()) };
+    if !token.is_expired() {
+        return Ok(token.access_token);
     }
-    let token = sp.get_token();
-    let guard = token.lock().await.unwrap();
-    guard.as_ref().map(|t| t.access_token.clone()).ok_or_else(|| "not signed in".into())
+    let _one_at_a_time = RENEWING.lock().await;
+    // another request may have renewed it while this one waited
+    if let Some(t) = sp.get_token().lock().await.unwrap().clone() {
+        if !t.is_expired() {
+            return Ok(t.access_token);
+        }
+    }
+    let refresh = token.refresh_token.clone().ok_or("sign-in expired: please connect Spotify again")?;
+    let r = reqwest::Client::new()
+        .post("https://accounts.spotify.com/api/token")
+        .form(&[("grant_type", "refresh_token"), ("refresh_token", refresh.as_str()), ("client_id", sp.get_creds().id.as_str())])
+        .timeout(std::time::Duration::from_secs(20))
+        .send()
+        .await
+        .map_err(|e| format!("couldn't renew the Spotify sign-in: {e}"))?;
+    let status = r.status();
+    let body: Value = r.json().await.map_err(err)?;
+    if !status.is_success() {
+        log::info!("aura: renewing the sign-in failed: {status} {body}");
+        return Err(format!("sign-in expired: please connect Spotify again ({status})"));
+    }
+    let secs = body["expires_in"].as_i64().unwrap_or(3600);
+    let renewed = rspotify::Token {
+        access_token: body["access_token"].as_str().unwrap_or_default().to_string(),
+        expires_in: chrono::Duration::seconds(secs),
+        expires_at: Some(chrono::Utc::now() + chrono::Duration::seconds(secs)),
+        // Spotify may hand out a new refresh token; the old one then stops working
+        refresh_token: body["refresh_token"].as_str().map(String::from).or(Some(refresh)),
+        scopes: token.scopes.clone(),
+    };
+    let access = renewed.access_token.clone();
+    *sp.get_token().lock().await.unwrap() = Some(renewed);
+    if let Err(e) = sp.write_token_cache().await {
+        log::info!("aura: couldn't save the renewed sign-in: {e}");
+    }
+    log::info!("aura: renewed the Spotify sign-in");
+    Ok(access)
 }
 
 /// Raw Web API GET. Spotify keeps trimming fields from its responses, which breaks
