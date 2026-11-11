@@ -537,6 +537,27 @@ body.karaoke .lyrics p.active .tr { -webkit-text-fill-color: rgba(255,255,255,.7
 .saver-viz { position: absolute; left: 6vw; right: 6vw; bottom: 4vh; width: 88vw; height: 10vh; opacity: .55; }
 .saver-clock { position: absolute; top: 4vh; right: 5vw; font-size: 4vh; font-weight: 300; color: rgba(255,255,255,.75); }
 
+/* ---------- welcome screen ---------- */
+#welcome {
+  position: fixed; inset: 0; z-index: 90; overflow: hidden; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px;
+  background: var(--base); transition: opacity .7s ease, transform .7s ease;
+}
+#welcome.out { opacity: 0; transform: scale(1.03); pointer-events: none; }
+.welcome-glow {
+  position: absolute; inset: -20%; z-index: -1; opacity: .5;
+  background: radial-gradient(circle at 35% 40%, color-mix(in srgb, var(--accent) 35%, transparent), transparent 45%),
+              radial-gradient(circle at 65% 62%, color-mix(in srgb, var(--accent2) 30%, transparent), transparent 45%);
+  filter: blur(60px); animation: welcome-drift 6s ease-in-out infinite alternate;
+}
+@keyframes welcome-drift { to { transform: translate(3%, -3%) scale(1.06); } }
+#welcome > * { animation: welcome-rise .8s cubic-bezier(.2, .8, .2, 1) both; }
+#welcome-avatar { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; margin-bottom: 22px; box-shadow: 0 12px 40px rgba(0,0,0,.45); }
+#welcome h1 { font-size: clamp(32px, 6vw, 64px); font-weight: 800; letter-spacing: -1px; animation-delay: .1s; }
+#welcome .welcome-back { font-size: clamp(16px, 2.2vw, 22px); font-weight: 600; margin-top: 10px; animation-delay: .35s; }
+#welcome .welcome-sub { color: var(--muted); font-size: clamp(13px, 1.6vw, 16px); margin-top: 8px; animation-delay: .6s; }
+@keyframes welcome-rise { from { opacity: 0; transform: translateY(14px); } }
+
 /* ---------- clickable artist names ---------- */
 .artist-link { color: inherit; cursor: pointer; text-decoration: none; }
 .artist-link:hover { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }

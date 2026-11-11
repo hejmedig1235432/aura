@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Aura</title>
-  <link rel="stylesheet" href="style.css?v=20261111183145" />
-  <link rel="stylesheet" href="web.css?v=20261111183145" />
+  <link rel="stylesheet" href="style.css?v=20261111184442" />
+  <link rel="stylesheet" href="web.css?v=20261111184442" />
   <link rel="icon" href="logo.png" />
   <meta name="description" content="Aura: a Spotify client with lyrics, stats and a glassy look." />
 </head>
@@ -300,6 +300,8 @@
           <span class="meter-pill" id="req-pill">–</span></div>
         <div class="row"><div><b>Updates</b><small id="update-info">Aura checks for new versions when it starts</small></div>
           <button class="pill" id="check-updates">Check for updates</button></div>
+        <div class="row"><div><b>Welcome screen</b><small>Greets you by name with good morning, afternoon or evening when Aura opens</small></div>
+          <span class="switch" data-set="welcome"></span></div>
         <div class="row"><div><b>Open on startup</b><small>Launch Aura when you sign in to Windows</small></div>
           <span class="switch" data-set="autostart"></span></div>
 
@@ -314,6 +316,14 @@
     </div>
   </div>
 
+  <div id="welcome" class="hidden">
+    <div class="welcome-glow"></div>
+    <img id="welcome-avatar" class="hidden" alt="" />
+    <h1 id="welcome-hi"></h1>
+    <p class="welcome-back">Welcome back to Aura</p>
+    <p class="welcome-sub" id="welcome-sub"></p>
+  </div>
+
   <div id="saver" class="hidden">
     <div class="saver-bg" id="saver-bg"></div>
     <div class="saver-clock" id="saver-clock"></div>
@@ -324,7 +334,7 @@
     <canvas id="saver-viz" class="saver-viz"></canvas>
   </div>
 
-  <script src="web.js?v=20261111183145"></script>
-  <script src="app.js?v=20261111183145"></script>
+  <script src="web.js?v=20261111184442"></script>
+  <script src="app.js?v=20261111184442"></script>
 </body>
 </html>

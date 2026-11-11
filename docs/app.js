@@ -17,7 +17,7 @@ const DEFAULTS = {
   accentMatch: false, accent: "#ffffff", gradientOn: true, accent2: "#fe9090",
   bgMode: "art", g1: "#0e1118", g2: "#3b4660", angle: 82,
   spotlight: true, spotSize: 226, spotStrength: 56,
-  material: "tabbed", blur: 30, panelAlpha: 55, autostart: true, webPlayerBeta: false, edgePlayer: true, fade: true, discord: true, discordId: "1567260633156554803", lyricsOffset: 400, visualizer: true, saverMin: "5",
+  material: "tabbed", blur: 30, panelAlpha: 55, autostart: true, webPlayerBeta: false, edgePlayer: true, fade: true, discord: true, discordId: "1567260633156554803", lyricsOffset: 400, visualizer: true, saverMin: "5", welcome: true,
 };
 const SWATCHES = ["#22c55e", "#2dd4bf", "#38bdf8", "#6366f1", "#a855f7", "#ec4899", "#f43f5e", "#f97316", "#facc15", "#a3e635", "#ffffff", "#94a3b8"];
 const PRESETS = {
@@ -340,9 +340,22 @@ function followedPlaylistView(el, view) {
   $("play-all").onclick = () => withDevice(() => invoke("play_playlist", { id: view.id })).then(() => setTimeout(refresh, 600));
 }
 
+/** "Good morning" and friends, by the time of day, plus a matching line for the welcome screen. */
+function greeting(date = new Date()) {
+  const h = date.getHours();
+  if (h < 5) return { hi: "Up late", sub: "The night is yours. Let's find something good." };
+  if (h < 12) return { hi: "Good morning", sub: "Ready to start the day with some music?" };
+  if (h < 18) return { hi: "Good afternoon", sub: "Hope your day is going well." };
+  return { hi: "Good evening", sub: "Time to sit back and unwind." };
+}
+/** First name from the Spotify profile ("adam smith" → "Adam"), or "" if there isn't one. */
+function firstName(profile) {
+  const n = (profile?.display_name ?? "").trim().split(/\s+/)[0] ?? "";
+  return n ? n[0].toUpperCase() + n.slice(1) : "";
+}
+
 async function renderHome(el) {
-  const hour = new Date().getHours();
-  const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const greet = greeting().hi;
   const [recent, top] = await Promise.all([
     invoke("library", { kind: "recent" }).catch(() => ({ items: [] })),
     invoke("library", { kind: "top" }).catch(() => ({ items: [] })),
@@ -354,7 +367,7 @@ async function renderHome(el) {
   const r = dedupe(normalize(recent.items || [])).slice(0, 12);
   const tp = normalize(top.items || []).slice(0, 12);
   el.innerHTML = `
-    <div class="view-head"><div class="eyebrow">HOME</div><h1>${greet}${me?.display_name ? ", " + esc(me.display_name) : ""}</h1></div>
+    <div class="view-head"><div class="eyebrow">HOME</div><h1>${greet}${firstName(me) ? ", " + esc(firstName(me)) : ""}</h1></div>
     <h3 class="sub-head">Jump back in</h3><div class="grid" data-list="r">${r.map(tile).join("")}</div>
     <h3 class="sub-head">On repeat</h3><div class="grid" data-list="t">${tp.map(tile).join("")}</div>
     <h3 class="sub-head">Your playlists</h3><div class="grid" id="home-pl">${playlistCache.map((p) =>
@@ -753,10 +766,39 @@ function syncLyrics(pos) {
 
 /* ================= boot ================= */
 
+/** A short "Good morning, Adam / Welcome back" screen when Aura opens. Click to skip. */
+async function showWelcome(profileLoaded) {
+  if (!S.welcome) return;
+  const w = $("welcome"), g = greeting();
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  $("welcome-hi").textContent = g.hi;
+  $("welcome-sub").textContent = g.sub;
+  $("welcome-avatar").classList.add("hidden");
+  w.classList.remove("hidden", "out");
+  let done = false;
+  const close = () => {
+    if (done) return;
+    done = true;
+    w.classList.add("out");
+    setTimeout(() => w.classList.add("hidden"), 700);
+  };
+  w.onclick = close;
+  // the name comes from Spotify; don't hold the screen up for long if it's slow
+  await Promise.race([profileLoaded, wait(2500)]);
+  const name = firstName(me);
+  if (name) $("welcome-hi").textContent = `${g.hi}, ${name}`;
+  const pic = me?.images?.[0]?.url;
+  if (pic) { $("welcome-avatar").src = pic; $("welcome-avatar").classList.remove("hidden"); }
+  await wait(2200);
+  close();
+}
+
 function enterApp() {
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
-  loadSidebar().then(() => go({ kind: "home" }));
+  const profileLoaded = loadSidebar();
+  showWelcome(profileLoaded);
+  profileLoaded.then(() => go({ kind: "home" }));
   refresh();
   // Ask Spotify what's playing only when something can have changed: the progress bar runs on
   // its own in between. Often right after you act or near a song's end, rarely otherwise.
