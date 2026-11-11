@@ -758,8 +758,6 @@ async fn toggle_widget(app: tauri::AppHandle, show: bool) -> Res {
         .resizable(true)
         // no maximize, so dragging it to a screen edge never snaps or fills the screen
         .maximizable(false)
-        // starts hidden; the widget moves itself to where you left it, then shows
-        .visible(false)
         .min_inner_size(190.0, 75.0)
         .max_inner_size(1140.0, 450.0)
         .skip_taskbar(true)
@@ -774,17 +772,13 @@ async fn toggle_widget(app: tauri::AppHandle, show: bool) -> Res {
     Ok(json!(true))
 }
 
-/// Shows the widget without taking focus from the app you're in, or hides it (auto-hide).
+/// Auto-hide: while the widget is faded out, clicks go straight through it to the app below.
+/// The window itself stays open. Hiding it behind Tauri's back made Tauri hide it for real
+/// the next time the pin changed the window's style.
 #[tauri::command]
 fn widget_visible(app: tauri::AppHandle, show: bool) -> Res {
     let Some(w) = app.get_webview_window("widget") else { return Ok(json!(false)) };
-    #[cfg(target_os = "windows")]
-    if let Ok(h) = w.hwnd() {
-        use windows_sys::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE, SW_SHOWNOACTIVATE};
-        unsafe { ShowWindow(h.0 as _, if show { SW_SHOWNOACTIVATE } else { SW_HIDE }) };
-        return Ok(json!(show));
-    }
-    if show { w.show() } else { w.hide() }.map_err(err)?;
+    w.set_ignore_cursor_events(!show).map_err(err)?;
     Ok(json!(show))
 }
 

@@ -43,7 +43,7 @@
   </style>
 </head>
 <body>
-  <div class="stage" id="stage">
+  <div class="stage faded" id="stage">
   <div class="card" id="card">
     <div class="bg" id="bg"></div>
     <img id="cover" alt="" />
@@ -178,25 +178,19 @@
     let shown = false, fullscreen = false, idleSince = Date.now();
     function updateVisibility() {
       if (np.playing) idleSince = Date.now();
+      if (!ready) return; // stays invisible until it has moved to its saved spot
       const idle = np.hideIdle && (!np.hasSong || !np.playing) && Date.now() - idleSince > 4000;
       const hide = idle || (np.hideFullscreen && fullscreen);
       $("stage").classList.toggle("faded", hide);
       setShown(!hide);
     }
-    let showTimer = null, ready = false;
+    let ready = false;
+    // Faded out = clicks pass through and it leaves the top spot; the window stays open.
     function setShown(on) {
-      if (!ready) return; // not until it has moved to its saved spot
-      if (on) {
-        if (shown) return;
-        shown = true;
-        clearTimeout(showTimer); showTimer = null;
-        invoke("widget_visible", { show: true }).catch(() => {});
-        if (pinned) win.setAlwaysOnTop(true).catch(() => {});
-      } else {
-        // hide after the fade; repeated while hidden, in case Aura showed the window again
-        shown = false;
-        if (!showTimer) showTimer = setTimeout(() => { showTimer = null; if (!shown) invoke("widget_visible", { show: false }).catch(() => {}); }, 450);
-      }
+      if (on === shown) return;
+      shown = on;
+      invoke("widget_visible", { show: on }).catch(() => {});
+      win.setAlwaysOnTop(on && pinned).catch(() => {});
     }
     setInterval(async () => {
       if (np.hideFullscreen) fullscreen = await invoke("foreground_fullscreen").catch(() => false);
@@ -220,7 +214,8 @@
       } catch {}
       fit();
       ready = true;
-      setShown(true);
+      shown = true; // the window starts clickable
+      updateVisibility();
       emit("aura-widget-ready");
     })();
   </script>
