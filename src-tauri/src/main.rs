@@ -737,7 +737,8 @@ async fn play_history(app: State<'_, App>) -> Res {
     Ok(json!({ "history": store.history, "tracks": store.tracks }))
 }
 
-/// Shows or hides the floating desktop widget (album art + current lyric line).
+/// Shows or hides the floating widget (album art + current lyric line). It floats above other
+/// apps by default; its pin button can drop it back to a normal window.
 #[tauri::command]
 async fn toggle_widget(app: tauri::AppHandle, show: bool) -> Res {
     if let Some(w) = app.get_webview_window("widget") {
@@ -755,7 +756,7 @@ async fn toggle_widget(app: tauri::AppHandle, show: bool) -> Res {
         .transparent(true)
         .resizable(false)
         .skip_taskbar(true)
-        .always_on_bottom(true)
+        .always_on_top(true)
         .shadow(false);
     if let Some(m) = app.primary_monitor().ok().flatten() {
         let s = m.scale_factor();

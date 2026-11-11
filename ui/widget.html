@@ -24,6 +24,7 @@
     .card:hover .controls { opacity: 1; }
     button { width: 26px; height: 26px; border: 0; border-radius: 7px; background: rgba(0,0,0,.35); color: #fff; cursor: pointer; font-size: 12px; }
     button:hover { background: var(--accent); color: #111; }
+    #pin.on { background: var(--accent); color: #111; }
   </style>
 </head>
 <body>
@@ -37,6 +38,7 @@
       <div class="next" id="next" data-tauri-drag-region></div>
     </div>
     <div class="controls">
+      <button id="pin" title="Keep on top of other apps">📌</button>
       <button data-a="prev" title="Previous">⏮</button>
       <button data-a="toggle" title="Play/pause" id="pp">⏯</button>
       <button data-a="next" title="Next">⏭</button>
@@ -56,6 +58,21 @@
       if (p.accent) document.documentElement.style.setProperty("--accent", p.accent);
     });
     document.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => emit("aura-widget-action", b.dataset.a)));
+
+    // Floats above websites, games and other apps unless unpinned; the choice is remembered.
+    const win = window.__TAURI__.window.getCurrentWindow();
+    let pinned = true;
+    try { pinned = localStorage.getItem("aura-widget-pinned") !== "0"; } catch {}
+    function applyPin() {
+      win.setAlwaysOnTop(pinned).catch(() => {});
+      $("pin").classList.toggle("on", pinned);
+      $("pin").title = pinned ? "On top of other apps (click to unpin)" : "Keep on top of other apps";
+      try { localStorage.setItem("aura-widget-pinned", pinned ? "1" : "0"); } catch {}
+    }
+    $("pin").onclick = () => { pinned = !pinned; applyPin(); };
+    applyPin();
+    // Some fullscreen apps grab the top spot; take it back now and then while pinned.
+    setInterval(() => { if (pinned) win.setAlwaysOnTop(true).catch(() => {}); }, 15000);
     emit("aura-widget-ready");
   </script>
 </body>
