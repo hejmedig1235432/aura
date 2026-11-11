@@ -9,17 +9,16 @@
     html, body { background: transparent; height: 100%; overflow: hidden; user-select: none; }
     body { font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: #fff; }
     /* Laid out at the original 380x150 and scaled to whatever size the window is. */
-    .stage { position: absolute; left: 0; top: 0; width: 380px; height: 150px; padding: 6px; transform-origin: 0 0; }
-    .grip { position: absolute; right: 8px; bottom: 8px; width: 16px; height: 16px; cursor: nwse-resize; opacity: 0; transition: opacity .2s;
-      background: linear-gradient(135deg, transparent 50%, rgba(255,255,255,.5) 50%, rgba(255,255,255,.5) 60%, transparent 60%, transparent 72%, rgba(255,255,255,.5) 72%, rgba(255,255,255,.5) 82%, transparent 82%); }
-    .card:hover .grip { opacity: 1; }
+    .stage { position: absolute; left: 0; top: 0; width: 380px; height: 150px; padding: 6px; transform-origin: 0 0; transition: opacity .4s; }
+    .stage.faded { opacity: 0; }
     .card {
       position: relative; height: 100%; display: flex; gap: 14px; align-items: center; padding: 12px 14px; overflow: hidden;
       border-radius: 18px; background: rgba(14, 16, 24, .55); border: 1px solid rgba(255,255,255,.12);
-      backdrop-filter: blur(24px) saturate(1.4); box-shadow: 0 10px 30px rgba(0,0,0,.35);
+      backdrop-filter: blur(24px) saturate(1.4); box-shadow: 0 10px 30px rgba(0,0,0,.35); cursor: grab;
     }
+    .card.dragging { cursor: grabbing; }
     .bg { position: absolute; inset: -40px; background-size: cover; background-position: center; filter: blur(40px) brightness(.5) saturate(1.4); z-index: -1; opacity: .8; }
-    img { width: 96px; height: 96px; border-radius: 12px; object-fit: cover; flex: none; box-shadow: 0 6px 20px rgba(0,0,0,.4); background: rgba(255,255,255,.08); }
+    img { width: 96px; height: 96px; border-radius: 12px; object-fit: cover; flex: none; box-shadow: 0 6px 20px rgba(0,0,0,.4); background: rgba(255,255,255,.08); pointer-events: none; }
     .meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
     .title { font-weight: 800; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .artist { font-size: 12px; color: rgba(255,255,255,.65); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -30,62 +29,129 @@
     button { width: 26px; height: 26px; border: 0; border-radius: 7px; background: rgba(0,0,0,.35); color: #fff; cursor: pointer; font-size: 12px; }
     button:hover { background: var(--accent); color: #111; }
     #pin.on { background: var(--accent); color: #111; }
+    #like.on { color: var(--accent); }
+    #like.on:hover { color: #111; }
+    /* progress: a thin line along the bottom; taller on hover, click to jump */
+    .prog { position: absolute; left: 14px; right: 30px; bottom: 4px; height: 12px; display: flex; align-items: center; cursor: pointer; }
+    .prog .rail { position: relative; width: 100%; height: 3px; border-radius: 3px; background: rgba(255,255,255,.18); transition: height .15s; overflow: hidden; }
+    .prog:hover .rail { height: 6px; }
+    .prog .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); border-radius: 3px; }
+    .prog.none { display: none; }
+    .grip { position: absolute; right: 8px; bottom: 8px; width: 16px; height: 16px; cursor: nwse-resize; opacity: 0; transition: opacity .2s;
+      background: linear-gradient(135deg, transparent 50%, rgba(255,255,255,.5) 50%, rgba(255,255,255,.5) 60%, transparent 60%, transparent 72%, rgba(255,255,255,.5) 72%, rgba(255,255,255,.5) 82%, transparent 82%); }
+    .card:hover .grip { opacity: 1; }
   </style>
 </head>
 <body>
   <div class="stage" id="stage">
-  <div class="card" data-tauri-drag-region>
-    <div class="bg" id="bg" data-tauri-drag-region></div>
-    <img id="cover" alt="" data-tauri-drag-region />
-    <div class="meta" data-tauri-drag-region>
-      <div class="title" id="title" data-tauri-drag-region>Aura</div>
-      <div class="artist" id="artist" data-tauri-drag-region>Nothing playing</div>
-      <div class="line" id="line" data-tauri-drag-region></div>
-      <div class="next" id="next" data-tauri-drag-region></div>
+  <div class="card" id="card">
+    <div class="bg" id="bg"></div>
+    <img id="cover" alt="" />
+    <div class="meta">
+      <div class="title" id="title">Aura</div>
+      <div class="artist" id="artist">Nothing playing</div>
+      <div class="line" id="line"></div>
+      <div class="next" id="next"></div>
     </div>
     <div class="controls">
       <button id="pin" title="Keep on top of other apps">📌</button>
+      <button id="like" data-a="like" title="Save to Liked Songs">♡</button>
       <button data-a="prev" title="Previous">⏮</button>
       <button data-a="toggle" title="Play/pause" id="pp">⏯</button>
       <button data-a="next" title="Next">⏭</button>
       <button data-a="close" title="Hide widget">✕</button>
     </div>
+    <div class="prog none" id="prog" title="Click to jump"><div class="rail"><div class="fill" id="fill"></div></div></div>
     <div class="grip" id="grip" title="Drag to resize (or Ctrl + mouse wheel)"></div>
   </div>
   </div>
   <script>
     const { emit, listen } = window.__TAURI__.event;
+    const { invoke } = window.__TAURI__.core;
+    const { LogicalSize, PhysicalPosition, availableMonitors } = window.__TAURI__.window;
+    const win = window.__TAURI__.window.getCurrentWindow();
     const $ = (id) => document.getElementById(id);
+    const store = {
+      get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+      set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+    };
+
+    /* ---- now playing ---- */
+    let np = { playing: false, pos: 0, dur: 0, sentAt: 0, hasSong: false, hideIdle: false, hideFullscreen: false };
     listen("aura-np", ({ payload: p }) => {
+      np = p;
       $("title").textContent = p.title || "Aura";
       $("artist").textContent = p.artist || "";
       if (p.cover && $("cover").src !== p.cover) { $("cover").src = p.cover; $("bg").style.backgroundImage = `url("${p.cover}")`; }
       $("line").textContent = p.line || (p.playing ? "♪" : "Paused");
       $("next").textContent = p.next || "";
       $("pp").textContent = p.playing ? "⏸" : "▶";
+      $("like").textContent = p.liked ? "♥" : "♡";
+      $("like").classList.toggle("on", !!p.liked);
+      $("like").title = p.liked ? "Remove from Liked Songs" : "Save to Liked Songs";
+      $("prog").classList.toggle("none", !p.dur);
       if (p.accent) document.documentElement.style.setProperty("--accent", p.accent);
+      updateVisibility();
     });
     document.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => emit("aura-widget-action", b.dataset.a)));
 
-    // Floats above websites, games and other apps unless unpinned; the choice is remembered.
-    const win = window.__TAURI__.window.getCurrentWindow();
-    let pinned = true;
-    try { pinned = localStorage.getItem("aura-widget-pinned") !== "0"; } catch {}
+    // Progress moves on its own between updates from Aura.
+    function nowPos() {
+      const p = np.pos + (np.playing ? Date.now() - np.sentAt : 0);
+      return Math.max(0, Math.min(np.dur || 0, p));
+    }
+    (function frame() {
+      $("fill").style.width = np.dur ? `${(nowPos() / np.dur) * 100}%` : "0";
+      requestAnimationFrame(frame);
+    })();
+    $("prog").addEventListener("click", (e) => {
+      const r = $("prog").getBoundingClientRect();
+      const f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+      np = { ...np, pos: f * np.dur, sentAt: Date.now() };
+      emit("aura-widget-action", `seek:${f}`);
+    });
+
+    /* ---- on top of other apps (pin) ---- */
+    let pinned = store.get("aura-widget-pinned") !== false;
     function applyPin() {
       win.setAlwaysOnTop(pinned).catch(() => {});
       $("pin").classList.toggle("on", pinned);
       $("pin").title = pinned ? "On top of other apps (click to unpin)" : "Keep on top of other apps";
-      try { localStorage.setItem("aura-widget-pinned", pinned ? "1" : "0"); } catch {}
+      store.set("aura-widget-pinned", pinned);
     }
     $("pin").onclick = () => { pinned = !pinned; applyPin(); };
     applyPin();
     // Some fullscreen apps grab the top spot; take it back now and then while pinned.
-    setInterval(() => { if (pinned) win.setAlwaysOnTop(true).catch(() => {}); }, 15000);
+    setInterval(() => { if (pinned && shown) win.setAlwaysOnTop(true).catch(() => {}); }, 15000);
 
-    // Size: drag the corner grip or use Ctrl + mouse wheel. The card keeps its shape and
-    // scales to fit the window; the size is remembered for next time.
+    /* ---- move it anywhere: drag the card (no snapping to screen edges) ---- */
+    let drag = null, moveQueued = null;
+    $("card").addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest("button, .grip, .prog")) return;
+      $("card").setPointerCapture(e.pointerId);
+      $("card").classList.add("dragging");
+      drag = { x: e.screenX, y: e.screenY, from: null };
+      win.outerPosition().then((p) => { if (drag) drag.from = p; }).catch(() => {});
+    });
+    $("card").addEventListener("pointermove", (e) => {
+      if (!drag?.from) return;
+      const r = devicePixelRatio || 1;
+      const x = Math.round(drag.from.x + (e.screenX - drag.x) * r), y = Math.round(drag.from.y + (e.screenY - drag.y) * r);
+      if (!moveQueued) requestAnimationFrame(() => { win.setPosition(new PhysicalPosition(moveQueued.x, moveQueued.y)).catch(() => {}); moveQueued = null; });
+      moveQueued = { x, y };
+    });
+    const endDrag = () => { drag = null; $("card").classList.remove("dragging"); };
+    $("card").addEventListener("pointerup", endDrag);
+    $("card").addEventListener("pointercancel", endDrag);
+    // remember where it was left
+    let posTimer;
+    win.onMoved(({ payload: p }) => {
+      clearTimeout(posTimer);
+      posTimer = setTimeout(() => store.set("aura-widget-pos", [p.x, p.y]), 400);
+    }).catch(() => {});
+
+    /* ---- size: drag the corner grip or Ctrl + mouse wheel; the card scales to fit ---- */
     const BASE_W = 380, BASE_H = 150;
-    const { LogicalSize } = window.__TAURI__.window;
     function fit() {
       const s = Math.min(innerWidth / BASE_W, innerHeight / BASE_H);
       const st = $("stage");
@@ -93,27 +159,70 @@
       st.style.left = `${(innerWidth - BASE_W * s) / 2}px`;
       st.style.top = `${(innerHeight - BASE_H * s) / 2}px`;
     }
-    let saveTimer;
+    let sizeTimer;
     addEventListener("resize", () => {
       fit();
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => {
-        try { localStorage.setItem("aura-widget-size", JSON.stringify([innerWidth, innerHeight])); } catch {}
-      }, 400);
+      clearTimeout(sizeTimer);
+      sizeTimer = setTimeout(() => store.set("aura-widget-size", [innerWidth, innerHeight]), 400);
     });
-    $("grip").onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); win.startResizeDragging("SouthEast").catch(() => {}); };
+    $("grip").onpointerdown = (e) => { e.preventDefault(); e.stopPropagation(); win.startResizeDragging("SouthEast").catch(() => {}); };
     addEventListener("wheel", (e) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
       const s = Math.min(3, Math.max(0.5, Math.min(innerWidth / BASE_W, innerHeight / BASE_H) * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
       win.setSize(new LogicalSize(Math.round(BASE_W * s), Math.round(BASE_H * s))).catch(() => {});
     }, { passive: false });
-    try {
-      const saved = JSON.parse(localStorage.getItem("aura-widget-size") || "null");
-      if (saved) win.setSize(new LogicalSize(saved[0], saved[1])).catch(() => {});
-    } catch {}
     fit();
-    emit("aura-widget-ready");
+
+    /* ---- auto-hide (Settings → Widget) ---- */
+    let shown = false, fullscreen = false, idleSince = Date.now();
+    function updateVisibility() {
+      if (np.playing) idleSince = Date.now();
+      const idle = np.hideIdle && (!np.hasSong || !np.playing) && Date.now() - idleSince > 4000;
+      const hide = idle || (np.hideFullscreen && fullscreen);
+      $("stage").classList.toggle("faded", hide);
+      setShown(!hide);
+    }
+    let showTimer = null, ready = false;
+    function setShown(on) {
+      if (!ready) return; // not until it has moved to its saved spot
+      if (on) {
+        if (shown) return;
+        shown = true;
+        clearTimeout(showTimer); showTimer = null;
+        invoke("widget_visible", { show: true }).catch(() => {});
+        if (pinned) win.setAlwaysOnTop(true).catch(() => {});
+      } else {
+        // hide after the fade; repeated while hidden, in case Aura showed the window again
+        shown = false;
+        if (!showTimer) showTimer = setTimeout(() => { showTimer = null; if (!shown) invoke("widget_visible", { show: false }).catch(() => {}); }, 450);
+      }
+    }
+    setInterval(async () => {
+      if (np.hideFullscreen) fullscreen = await invoke("foreground_fullscreen").catch(() => false);
+      else fullscreen = false;
+      updateVisibility();
+    }, 1000);
+
+    /* ---- open where you left it, then show ---- */
+    (async () => {
+      try {
+        const size = store.get("aura-widget-size");
+        if (size) await win.setSize(new LogicalSize(size[0], size[1]));
+        const pos = store.get("aura-widget-pos");
+        if (pos) {
+          // only if that spot is still on a screen (a monitor may have been unplugged)
+          const mons = await availableMonitors();
+          const onScreen = mons.some((m) => pos[0] + 40 > m.position.x && pos[0] < m.position.x + m.size.width - 40
+            && pos[1] + 20 > m.position.y && pos[1] < m.position.y + m.size.height - 40);
+          if (onScreen) await win.setPosition(new PhysicalPosition(pos[0], pos[1]));
+        }
+      } catch {}
+      fit();
+      ready = true;
+      setShown(true);
+      emit("aura-widget-ready");
+    })();
   </script>
 </body>
 </html>

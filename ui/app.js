@@ -98,6 +98,7 @@ function set(key, value) {
   save();
   applySettings();
   if (key === "material") invoke("set_material", { kind: value }).catch(() => {});
+  if (key === "widgetHideIdle" || key === "widgetHideFullscreen") sendWidget();
   if (key === "autostart") invoke("set_autostart", { on: value }).catch((e) => toast(`Startup setting failed: ${e}`));
   if (key === "songWallpaper") {
     value ? updateWallpaper(true) : invoke("restore_wallpaper").catch((e) => toast(`Wallpaper: ${e}`));
@@ -1485,12 +1486,18 @@ S.widget ??= false;
 function sendWidget() {
   if (!S.widget && !S.songWallpaper) return; // the widget and the desktop layer both listen
   const line = lastLine >= 0 ? lyricLines[lastLine]?.text : "";
+  const pos = Math.min(current.dur, current.pos + (current.playing ? performance.now() - current.at : 0));
+  widgetSentAt = performance.now();
   emit("aura-np", {
     title: $("pb-title").textContent, artist: $("pb-artist").textContent, cover: current.cover,
     playing: current.playing, line: line || "", next: lyricLines[lastLine + 1]?.text ?? "",
     accent: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
+    // progress bar: the widget moves it on its own from pos + the time this was sent
+    hasSong: !!current.id, pos, dur: current.dur, sentAt: Date.now(), liked: current.liked,
+    hideIdle: !!S.widgetHideIdle, hideFullscreen: !!S.widgetHideFullscreen,
   }).catch(() => {});
 }
+let widgetSentAt = 0;
 async function setWidget(on) {
   S.widget = on; save();
   $("btn-widget").classList.toggle("on", on);
@@ -1504,6 +1511,13 @@ listen("aura-widget-action", (e) => {
   if (a === "toggle") togglePlay();
   else if (a === "next" || a === "prev") skip(a);
   else if (a === "close") setWidget(false);
+  else if (a === "like") { $("like").click(); setTimeout(sendWidget, 700); }
+  else if (typeof a === "string" && a.startsWith("seek:") && current.dur) {
+    const ms = Math.round(Math.min(1, Math.max(0, +a.slice(5))) * current.dur);
+    current.pos = ms; current.at = performance.now();
+    call("seek", { ms }).catch(() => {});
+    sendWidget();
+  }
 });
 if (S.widget) setTimeout(() => setWidget(true), 3000);
 if (S.songWallpaper) setTimeout(() => invoke("toggle_desk", { show: true }).catch(() => {}), 3000);
@@ -1514,7 +1528,9 @@ const tickExtrasBase = tickExtras;
 tickExtras = (pos) => {
   tickExtrasBase(pos);
   karaokeTick(pos + (S.lyricsOffset ?? 400));
-  if ((S.widget || S.songWallpaper) && (lastLine !== widgetLine || current.playing !== widgetPlaying)) {
+  // also every 2 s, so the widget's progress bar, like button and auto-hide stay in step
+  if ((S.widget || S.songWallpaper) && (lastLine !== widgetLine || current.playing !== widgetPlaying
+      || performance.now() - widgetSentAt > 2000)) {
     widgetLine = lastLine; widgetPlaying = current.playing;
     sendWidget();
   }

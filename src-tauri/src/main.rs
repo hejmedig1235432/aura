@@ -756,6 +756,10 @@ async fn toggle_widget(app: tauri::AppHandle, show: bool) -> Res {
         .transparent(true)
         // resizable from the corner grip or Ctrl + mouse wheel; the content scales with it
         .resizable(true)
+        // no maximize, so dragging it to a screen edge never snaps or fills the screen
+        .maximizable(false)
+        // starts hidden; the widget moves itself to where you left it, then shows
+        .visible(false)
         .min_inner_size(190.0, 75.0)
         .max_inner_size(1140.0, 450.0)
         .skip_taskbar(true)
@@ -768,6 +772,49 @@ async fn toggle_widget(app: tauri::AppHandle, show: bool) -> Res {
     }
     b.build().map_err(err)?;
     Ok(json!(true))
+}
+
+/// Shows the widget without taking focus from the app you're in, or hides it (auto-hide).
+#[tauri::command]
+fn widget_visible(app: tauri::AppHandle, show: bool) -> Res {
+    let Some(w) = app.get_webview_window("widget") else { return Ok(json!(false)) };
+    #[cfg(target_os = "windows")]
+    if let Ok(h) = w.hwnd() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE, SW_SHOWNOACTIVATE};
+        unsafe { ShowWindow(h.0 as _, if show { SW_SHOWNOACTIVATE } else { SW_HIDE }) };
+        return Ok(json!(show));
+    }
+    if show { w.show() } else { w.hide() }.map_err(err)?;
+    Ok(json!(show))
+}
+
+/// True when the app in front fills the whole main screen, like a game or a fullscreen video.
+/// Maximized windows don't count.
+#[tauri::command]
+fn foreground_fullscreen() -> bool {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        use windows_sys::Win32::Foundation::RECT;
+        use windows_sys::Win32::UI::WindowsAndMessaging::*;
+        let h = GetForegroundWindow();
+        if h.is_null() || h == GetDesktopWindow() || h == GetShellWindow() || IsZoomed(h) != 0 {
+            return false;
+        }
+        let mut class = [0u16; 64];
+        let n = GetClassNameW(h, class.as_mut_ptr(), class.len() as i32);
+        let class = String::from_utf16_lossy(&class[..n.max(0) as usize]);
+        if class == "WorkerW" || class == "Progman" {
+            return false; // the desktop itself
+        }
+        let mut r: RECT = std::mem::zeroed();
+        if GetWindowRect(h, &mut r) == 0 {
+            return false;
+        }
+        let (sw, sh) = (GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
+        r.left <= 0 && r.top <= 0 && r.right >= sw && r.bottom >= sh
+    }
+    #[cfg(not(target_os = "windows"))]
+    false
 }
 
 #[tauri::command]
@@ -946,7 +993,7 @@ fn main() {
             shuffle, repeat, search, play_uris, play_playlist, add_queue, playlists, library, queue, is_liked, set_liked,
             lyrics, set_material, set_autostart, open_spotify, sign_out, web_token, report, start_edge_player,
             sync_plays, play_counts, top_items, discord_set, discord_clear,
-            index_lyrics, lyrics_search, translate, play_history, toggle_widget,
+            index_lyrics, lyrics_search, translate, play_history, toggle_widget, widget_visible, foreground_fullscreen,
             artist, album, play_context, hotkeys::show_overlay,
             updates::check_update, updates::install_update,
             wallpaper::set_song_wallpaper, wallpaper::restore_wallpaper,
