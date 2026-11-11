@@ -7,7 +7,12 @@
     :root { --accent: #fe9090; }
     * { box-sizing: border-box; margin: 0; }
     html, body { background: transparent; height: 100%; overflow: hidden; user-select: none; }
-    body { font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: #fff; padding: 6px; }
+    body { font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: #fff; }
+    /* Laid out at the original 380x150 and scaled to whatever size the window is. */
+    .stage { position: absolute; left: 0; top: 0; width: 380px; height: 150px; padding: 6px; transform-origin: 0 0; }
+    .grip { position: absolute; right: 8px; bottom: 8px; width: 16px; height: 16px; cursor: nwse-resize; opacity: 0; transition: opacity .2s;
+      background: linear-gradient(135deg, transparent 50%, rgba(255,255,255,.5) 50%, rgba(255,255,255,.5) 60%, transparent 60%, transparent 72%, rgba(255,255,255,.5) 72%, rgba(255,255,255,.5) 82%, transparent 82%); }
+    .card:hover .grip { opacity: 1; }
     .card {
       position: relative; height: 100%; display: flex; gap: 14px; align-items: center; padding: 12px 14px; overflow: hidden;
       border-radius: 18px; background: rgba(14, 16, 24, .55); border: 1px solid rgba(255,255,255,.12);
@@ -28,6 +33,7 @@
   </style>
 </head>
 <body>
+  <div class="stage" id="stage">
   <div class="card" data-tauri-drag-region>
     <div class="bg" id="bg" data-tauri-drag-region></div>
     <img id="cover" alt="" data-tauri-drag-region />
@@ -44,6 +50,8 @@
       <button data-a="next" title="Next">⏭</button>
       <button data-a="close" title="Hide widget">✕</button>
     </div>
+    <div class="grip" id="grip" title="Drag to resize (or Ctrl + mouse wheel)"></div>
+  </div>
   </div>
   <script>
     const { emit, listen } = window.__TAURI__.event;
@@ -73,6 +81,38 @@
     applyPin();
     // Some fullscreen apps grab the top spot; take it back now and then while pinned.
     setInterval(() => { if (pinned) win.setAlwaysOnTop(true).catch(() => {}); }, 15000);
+
+    // Size: drag the corner grip or use Ctrl + mouse wheel. The card keeps its shape and
+    // scales to fit the window; the size is remembered for next time.
+    const BASE_W = 380, BASE_H = 150;
+    const { LogicalSize } = window.__TAURI__.window;
+    function fit() {
+      const s = Math.min(innerWidth / BASE_W, innerHeight / BASE_H);
+      const st = $("stage");
+      st.style.transform = `scale(${s})`;
+      st.style.left = `${(innerWidth - BASE_W * s) / 2}px`;
+      st.style.top = `${(innerHeight - BASE_H * s) / 2}px`;
+    }
+    let saveTimer;
+    addEventListener("resize", () => {
+      fit();
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        try { localStorage.setItem("aura-widget-size", JSON.stringify([innerWidth, innerHeight])); } catch {}
+      }, 400);
+    });
+    $("grip").onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); win.startResizeDragging("SouthEast").catch(() => {}); };
+    addEventListener("wheel", (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const s = Math.min(3, Math.max(0.5, Math.min(innerWidth / BASE_W, innerHeight / BASE_H) * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+      win.setSize(new LogicalSize(Math.round(BASE_W * s), Math.round(BASE_H * s))).catch(() => {});
+    }, { passive: false });
+    try {
+      const saved = JSON.parse(localStorage.getItem("aura-widget-size") || "null");
+      if (saved) win.setSize(new LogicalSize(saved[0], saved[1])).catch(() => {});
+    } catch {}
+    fit();
     emit("aura-widget-ready");
   </script>
 </body>

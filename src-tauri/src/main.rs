@@ -754,7 +754,10 @@ async fn toggle_widget(app: tauri::AppHandle, show: bool) -> Res {
         .inner_size(size.0, size.1)
         .decorations(false)
         .transparent(true)
-        .resizable(false)
+        // resizable from the corner grip or Ctrl + mouse wheel; the content scales with it
+        .resizable(true)
+        .min_inner_size(190.0, 75.0)
+        .max_inner_size(1140.0, 450.0)
         .skip_taskbar(true)
         .always_on_top(true)
         .shadow(false);
