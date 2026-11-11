@@ -17,6 +17,9 @@
       backdrop-filter: blur(24px) saturate(1.4); box-shadow: 0 10px 30px rgba(0,0,0,.35); cursor: grab;
     }
     .card.dragging { cursor: grabbing; }
+    .card.locked { cursor: default; }
+    .card.locked .grip { display: none; }
+    #lock.on { background: var(--accent); color: #111; }
     .bg { position: absolute; inset: -40px; background-size: cover; background-position: center; filter: blur(40px) brightness(.5) saturate(1.4); z-index: -1; opacity: .8; }
     img { width: 96px; height: 96px; border-radius: 12px; object-fit: cover; flex: none; box-shadow: 0 6px 20px rgba(0,0,0,.4); background: rgba(255,255,255,.08); pointer-events: none; }
     .meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -54,6 +57,7 @@
       <div class="next" id="next"></div>
     </div>
     <div class="controls">
+      <button id="lock" title="Lock in place">🔓</button>
       <button id="pin" title="Keep on top of other apps">📌</button>
       <button id="like" data-a="like" title="Save to Liked Songs">♡</button>
       <button data-a="prev" title="Previous">⏮</button>
@@ -124,10 +128,23 @@
     // Some fullscreen apps grab the top spot; take it back now and then while pinned.
     setInterval(() => { if (pinned && shown) win.setAlwaysOnTop(true).catch(() => {}); }, 15000);
 
+    /* ---- lock: no moving or resizing until unlocked; the buttons still work ---- */
+    let locked = store.get("aura-widget-locked") === true;
+    function applyLock() {
+      $("lock").textContent = locked ? "🔒" : "🔓";
+      $("lock").classList.toggle("on", locked);
+      $("lock").title = locked ? "Locked in place (click to unlock)" : "Lock in place";
+      $("card").classList.toggle("locked", locked);
+      win.setResizable(!locked).catch(() => {}); // the window's own edges too
+      store.set("aura-widget-locked", locked);
+    }
+    $("lock").onclick = () => { locked = !locked; applyLock(); };
+    applyLock();
+
     /* ---- move it anywhere: drag the card (no snapping to screen edges) ---- */
     let drag = null, moveQueued = null;
     $("card").addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || e.target.closest("button, .grip, .prog")) return;
+      if (locked || e.button !== 0 || e.target.closest("button, .grip, .prog")) return;
       $("card").setPointerCapture(e.pointerId);
       $("card").classList.add("dragging");
       drag = { x: e.screenX, y: e.screenY, from: null };
@@ -165,9 +182,10 @@
       clearTimeout(sizeTimer);
       sizeTimer = setTimeout(() => store.set("aura-widget-size", [innerWidth, innerHeight]), 400);
     });
-    $("grip").onpointerdown = (e) => { e.preventDefault(); e.stopPropagation(); win.startResizeDragging("SouthEast").catch(() => {}); };
+    $("grip").onpointerdown = (e) => { e.preventDefault(); e.stopPropagation(); if (!locked) win.startResizeDragging("SouthEast").catch(() => {}); };
     addEventListener("wheel", (e) => {
       if (!e.ctrlKey) return;
+      if (locked) { e.preventDefault(); return; }
       e.preventDefault();
       const s = Math.min(3, Math.max(0.5, Math.min(innerWidth / BASE_W, innerHeight / BASE_H) * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
       win.setSize(new LogicalSize(Math.round(BASE_W * s), Math.round(BASE_H * s))).catch(() => {});

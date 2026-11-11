@@ -297,6 +297,8 @@
           <span class="meter-pill" id="req-pill">–</span></div>
         <div class="row"><div><b>Updates</b><small id="update-info">Aura checks for new versions when it starts</small></div>
           <button class="pill" id="check-updates">Check for updates</button></div>
+        <div class="row"><div><b>Welcome screen</b><small>Greets you by name with good morning, afternoon or evening when Aura opens</small></div>
+          <span class="switch" data-set="welcome"></span></div>
         <div class="row"><div><b>Open on startup</b><small>Launch Aura when you sign in to Windows</small></div>
           <span class="switch" data-set="autostart"></span></div>
 
@@ -309,6 +311,14 @@
           <button class="pill" id="signout">Sign out</button></div>
       </div>
     </div>
+  </div>
+
+  <div id="welcome" class="hidden">
+    <div class="welcome-glow"></div>
+    <img id="welcome-avatar" class="hidden" alt="" />
+    <h1 id="welcome-hi"></h1>
+    <p class="welcome-back">Welcome back to Aura</p>
+    <p class="welcome-sub" id="welcome-sub"></p>
   </div>
 
   <div id="saver" class="hidden">
