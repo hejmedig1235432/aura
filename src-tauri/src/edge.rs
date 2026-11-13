@@ -13,7 +13,26 @@ use tauri::{AppHandle, Manager};
 use crate::App;
 
 const PAGE: &str = include_str!("edge_player.html");
-const PORT: u16 = 8899;
+
+/// The page server's port and key, set up once per Aura run and reused if the player is
+/// started again. The port is picked by Windows: a fixed one (it was 8899) failed with
+/// "address already in use" (os error 10048) when an older Aura or another program held it.
+static SERVER: std::sync::OnceLock<(u16, String)> = std::sync::OnceLock::new();
+
+fn server(app: &AppHandle) -> Result<(u16, String), String> {
+    if let Some(s) = SERVER.get() {
+        return Ok(s.clone());
+    }
+    let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| e.to_string())?;
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    let key = random_key();
+    {
+        let app = app.clone();
+        let key = key.clone();
+        std::thread::spawn(move || serve(app, listener, key));
+    }
+    Ok(SERVER.get_or_init(|| (port, key)).clone())
+}
 
 fn edge_path() -> Option<std::path::PathBuf> {
     let candidates = [
@@ -108,14 +127,8 @@ fn serve(app: AppHandle, listener: TcpListener, key: String) {
 /// Starts the localhost page server and the off-screen Edge window. Returns the Edge process.
 pub fn start(app: &AppHandle) -> Result<Child, String> {
     let edge = edge_path().ok_or("Microsoft Edge was not found")?;
-    let listener = TcpListener::bind(("127.0.0.1", PORT)).map_err(|e| e.to_string())?;
-    let key = random_key();
-    let url = format!("http://127.0.0.1:{PORT}/?k={key}");
-    {
-        let app = app.clone();
-        let key = key.clone();
-        std::thread::spawn(move || serve(app, listener, key));
-    }
+    let (port, key) = server(app)?;
+    let url = format!("http://127.0.0.1:{port}/?k={key}");
     let profile = dirs::config_dir().unwrap_or_default().join("prism").join("edge-player");
     close_leftovers();
     Command::new(edge)
