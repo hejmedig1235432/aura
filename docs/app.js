@@ -766,6 +766,37 @@ function syncLyrics(pos) {
 
 /* ================= boot ================= */
 
+/** A few short facts for the welcome screen from Aura's own play history: listening time
+ *  yesterday (or today so far), this week's top artist and the day streak. */
+async function welcomeStats() {
+  const { history = [], tracks = {} } = (await invoke("play_history").catch(() => null)) ?? {};
+  if (!history.length) return [];
+  const now = new Date(), y = new Date(); y.setDate(y.getDate() - 1);
+  const today = dayKey(now), yesterday = dayKey(y), weekAgo = now - 7 * 86400000;
+  const fmtTime = (ms) => {
+    const m = Math.round(ms / 60000), h = Math.floor(m / 60);
+    return h ? `${h} h ${m % 60} min` : `${m} min`;
+  };
+  let msYesterday = 0, msToday = 0;
+  const artistPlays = new Map(), days = new Set();
+  for (const p of history) {
+    const d = new Date(p.at), k = dayKey(d), t = tracks[p.uri];
+    days.add(k);
+    if (k === yesterday) msYesterday += t?.duration_ms || 0;
+    if (k === today) msToday += t?.duration_ms || 0;
+    const artist = t?.artists?.split(", ")[0];
+    if (artist && d >= weekAgo) artistPlays.set(artist, (artistPlays.get(artist) ?? 0) + 1);
+  }
+  const out = [];
+  if (msYesterday >= 60000) out.push(`🎧 ${fmtTime(msYesterday)} yesterday`);
+  else if (msToday >= 60000) out.push(`🎧 ${fmtTime(msToday)} today so far`);
+  const top = [...artistPlays].sort((a, b) => b[1] - a[1])[0];
+  if (top) out.push(`⭐ Top artist this week: ${top[0]}`);
+  const streak = streaks([...days]).current;
+  if (streak >= 2) out.push(`🔥 ${streak}-day streak`);
+  return out;
+}
+
 /** A short "Good morning, Adam / Welcome back" screen when Aura opens. Click to skip. */
 async function showWelcome(profileLoaded) {
   if (!S.welcome) return;
@@ -774,7 +805,9 @@ async function showWelcome(profileLoaded) {
   $("welcome-hi").textContent = g.hi;
   $("welcome-sub").textContent = g.sub;
   $("welcome-avatar").classList.add("hidden");
+  $("welcome-stats").innerHTML = "";
   w.classList.remove("hidden", "out");
+  const statsLoaded = welcomeStats().catch(() => []);
   let done = false;
   const close = () => {
     if (done) return;
@@ -789,7 +822,9 @@ async function showWelcome(profileLoaded) {
   if (name) $("welcome-hi").textContent = `${g.hi}, ${name}`;
   const pic = me?.images?.[0]?.url;
   if (pic) { $("welcome-avatar").src = pic; $("welcome-avatar").classList.remove("hidden"); }
-  await wait(2200);
+  const stats = await Promise.race([statsLoaded, wait(800).then(() => [])]);
+  $("welcome-stats").innerHTML = stats.map((s, i) => `<span style="animation-delay:${0.15 + i * 0.15}s">${esc(s)}</span>`).join("");
+  await wait(stats.length ? 3400 : 2200); // a little longer when there's something to read
   close();
 }
 
