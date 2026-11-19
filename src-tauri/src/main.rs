@@ -996,6 +996,13 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building Aura")
         .run(|app, event| {
+            // Closing Aura's main window quits Aura completely: otherwise the widget, the
+            // desktop layer or the hotkey overlay keeps the app (and the Edge player) running.
+            if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } = &event {
+                if label == "main" {
+                    app.exit(0);
+                }
+            }
             if let tauri::RunEvent::Exit = event {
                 let _ = wallpaper::restore_now(); // give you your own wallpaper back
                 offline::flush();
