@@ -959,6 +959,16 @@ fn main() {
     init_log();
     log_request_rate();
     tauri::Builder::default()
+        // Only one Aura at a time. A second copy fought the first over the hotkeys and the
+        // built-in player's port; now opening Aura again just brings the open window forward.
+        // (Must be the first plugin.)
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .plugin(hotkeys::plugin())
         .plugin(tauri_plugin_updater::Builder::new().build())
