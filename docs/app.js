@@ -2139,7 +2139,28 @@ listen("edge-state", ({ payload: s }) => {
   $("repeat").classList.toggle("on", current.repeat !== "off");
   $("repeat").querySelector("i").textContent = current.repeat === "track" ? "1" : "";
   markPlaying();
+  planHandoffBefore(s.next);
 });
+
+/* When a playlist or album moves on by itself to a song the built-in player is known to fail
+   on, move playback to the Spotify app just before that song starts, instead of letting it
+   fail first (some songs used to fail dozens of times this way). */
+let preHandoffTimer = null;
+function planHandoffBefore(nextUri) {
+  clearTimeout(preHandoffTimer);
+  if (!nextUri || !edgeBad.has(nextUri) || edgeHandedOff || !current.playing || current.repeat === "track") return;
+  const left = current.dur - current.pos;
+  preHandoffTimer = setTimeout(async () => {
+    if (!current.playing || edgeHandedOff) return;
+    const app = (await invoke("devices").catch(() => [])).find((d) => d.name !== "Aura");
+    if (!app) return; // no Spotify app open: the usual retry/hand-off after a failure still applies
+    edgeHandedOff = true;
+    reportLog(`handing off before ${nextUri}: the built-in player can't play it`);
+    toast("The next song plays in the Spotify app (the built-in player can't play it)");
+    await invoke("transfer", { deviceId: app.id, play: true }).catch(() => {});
+    setTimeout(refresh, 1500);
+  }, Math.max(0, left - 2500));
+}
 
 /* ================= visualizer ================= */
 // Spotify's audio is copy-protected and its audio-analysis data isn't available to new apps,
