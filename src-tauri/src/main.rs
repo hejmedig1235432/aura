@@ -834,9 +834,18 @@ fn set_material(window: WebviewWindow, kind: String) -> Res {
 /// Pulls the latest plays from Spotify into Aura's play counter. Returns how many were new.
 #[tauri::command]
 async fn sync_plays(app: State<'_, App>) -> Res {
-    let recent = get(&app, "/me/player/recently-played", &[("limit", "50")]).await?;
+    let recent = get(&app, "/me/player/recently-played", &[("limit", "50")]).await.map_err(|e| {
+        log::info!("aura: syncing plays failed: {e}");
+        e
+    })?;
+    let got = recent["items"].as_array().map_or(0, |a| a.len());
     let mut store = app.plays.lock().await;
-    Ok(json!(plays::merge(&mut store, &recent)?))
+    let added = plays::merge(&mut store, &recent).map_err(|e| {
+        log::info!("aura: saving plays failed: {e}");
+        e
+    })?;
+    log::info!("aura: synced plays: {got} from Spotify, {added} new");
+    Ok(json!(added))
 }
 
 /// All play counts Aura has recorded, keyed by track URI.
@@ -941,22 +950,48 @@ fn set_autostart(app: tauri::AppHandle, on: bool) -> Res {
     Ok(json!(launcher.is_enabled().unwrap_or(on)))
 }
 
-/// Player logs go to %APPDATA%\prism\aura.log so playback problems can be diagnosed.
+/// Aura's log: %APPDATA%\prism\aura.log, so problems can be diagnosed.
+///
+/// The file is opened fresh for every line instead of once at start. With one handle kept
+/// open for the whole run, installed copies of Aura stopped logging entirely (from 6 Nov
+/// 2026 on) while hand-started ones worked; reopening means nothing at launch can silence
+/// the log for a whole session. Lines are rare (a few per song), so the cost is nothing.
+struct FileLog {
+    path: std::path::PathBuf,
+}
+
+impl log::Log for FileLog {
+    fn enabled(&self, m: &log::Metadata) -> bool {
+        m.level() <= log::Level::Info && m.target().starts_with("aura")
+    }
+    fn log(&self, r: &log::Record) {
+        if !self.enabled(r.metadata()) {
+            return;
+        }
+        let line = format!("{} [{}] {}\n", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), r.level(), r.args());
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&self.path) {
+            let _ = f.write_all(line.as_bytes());
+        }
+    }
+    fn flush(&self) {}
+}
+
 fn init_log() {
     let dir = dirs::config_dir().unwrap_or_default().join("prism");
     let _ = std::fs::create_dir_all(&dir);
-    // Append across runs, but start over once the log passes 2 MB.
     let path = dir.join("aura.log");
-    let big = std::fs::metadata(&path).map(|m| m.len() > 2_000_000).unwrap_or(false);
-    let file = std::fs::OpenOptions::new().create(true).write(true).append(!big).truncate(big).open(&path);
-    if let Ok(file) = file {
-        let cfg = simplelog::ConfigBuilder::new().add_filter_allow_str("aura").build();
-        let _ = simplelog::WriteLogger::init(log::LevelFilter::Info, cfg, file);
+    // keep appending across runs, but start over once the log passes 2 MB
+    if std::fs::metadata(&path).map(|m| m.len() > 2_000_000).unwrap_or(false) {
+        let _ = std::fs::remove_file(&path);
+    }
+    if log::set_boxed_logger(Box::new(FileLog { path })).is_ok() {
+        log::set_max_level(log::LevelFilter::Info);
     }
 }
 
 fn main() {
     init_log();
+    log::info!("aura: starting version {}", env!("CARGO_PKG_VERSION"));
     log_request_rate();
     tauri::Builder::default()
         // Only one Aura at a time. A second copy fought the first over the hotkeys and the
