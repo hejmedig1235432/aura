@@ -46,6 +46,8 @@ Aura's audio player. Keep this window open.
       const tr = s.track_window?.current_track;
       const state = {
         paused: s.paused, position: s.position, at: Date.now(), shuffle: s.shuffle, repeat: s.repeat_mode,
+        // the song coming up, so Aura can hand songs this player can't play to the Spotify app in time
+        next: s.track_window?.next_tracks?.[0]?.uri ?? null,
         track: tr && {
           uri: tr.uri, id: tr.id, name: tr.name, duration_ms: tr.duration_ms,
           artists: (tr.artists || []).map((a) => ({ name: a.name, uri: a.uri })),
