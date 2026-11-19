@@ -557,6 +557,12 @@ body.karaoke .lyrics p.active .tr { -webkit-text-fill-color: rgba(255,255,255,.7
 #welcome .welcome-back { font-size: clamp(16px, 2.2vw, 22px); font-weight: 600; margin-top: 10px; animation-delay: .35s; }
 #welcome .welcome-sub { color: var(--muted); font-size: clamp(13px, 1.6vw, 16px); margin-top: 8px; animation-delay: .6s; }
 @keyframes welcome-rise { from { opacity: 0; transform: translateY(14px); } }
+#welcome .welcome-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 26px; max-width: 640px; min-height: 34px; animation: none; }
+.welcome-stats span {
+  padding: 7px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.1);
+  animation: welcome-rise .7s cubic-bezier(.2, .8, .2, 1) both;
+}
 
 /* ---------- clickable artist names ---------- */
 .artist-link { color: inherit; cursor: pointer; text-decoration: none; }
