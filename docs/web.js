@@ -56,13 +56,23 @@
     store("aura.web.token", token);
   }
 
+  // Ask the browser to keep Aura's saved data (sign-in, history) instead of clearing it when
+  // space runs low or the site hasn't been opened for a while. Home-screen apps usually get it.
+  navigator.storage?.persist?.().catch(() => {});
+
   // Coming back from Spotify's sign-in page with ?code=...
   const authReady = (async () => {
     const q = new URLSearchParams(location.search);
     if (q.get("code")) {
-      const verifier = sessionStorage.getItem("aura.pkce");
+      // The one-time key is kept in localStorage, not sessionStorage: on iPhone the sign-in page
+      // can come back in a fresh window where sessionStorage is empty, and the sign-in then
+      // silently did nothing.
+      const saved = load("aura.pkce", null);
+      const verifier = (saved && Date.now() - saved.at < 15 * 60 * 1000 ? saved.v : null) ?? sessionStorage.getItem("aura.pkce");
+      localStorage.removeItem("aura.pkce");
       history.replaceState(null, "", REDIRECT);
-      if (verifier) await exchange({ grant_type: "authorization_code", code: q.get("code"), redirect_uri: REDIRECT, code_verifier: verifier }).catch((e) => { authError = String(e); });
+      if (!verifier) authError = "The sign-in didn't finish. Please tap Connect Spotify again.";
+      else await exchange({ grant_type: "authorization_code", code: q.get("code"), redirect_uri: REDIRECT, code_verifier: verifier }).catch((e) => { authError = String(e); });
     } else if (q.get("error")) {
       authError = `Spotify sign-in was cancelled or refused (${q.get("error")}).`;
       history.replaceState(null, "", REDIRECT);
@@ -71,16 +81,31 @@
     if (authError) addEventListener("DOMContentLoaded", () => { const m = document.getElementById("login-msg"); if (m) m.textContent = authError; });
   })();
 
-  async function accessToken() {
+  // One renewal at a time: Spotify hands out a new refresh token on every renewal and the old
+  // one stops working, so two renewals racing each other could sign you out.
+  let renewing = null;
+  function renew() {
+    renewing ??= exchange({ grant_type: "refresh_token", refresh_token: token.refresh_token }).finally(() => { renewing = null; });
+    return renewing;
+  }
+
+  async function accessToken({ fresh = false } = {}) {
     await authReady;
     if (!token) throw "not signed in";
-    if (Date.now() > token.expires_at) await exchange({ grant_type: "refresh_token", refresh_token: token.refresh_token });
+    if (fresh || Date.now() > token.expires_at) await renew();
     return token.access_token;
   }
+
+  // Coming back to Aura after a while (phone unlocked, app reopened): renew the sign-in now if
+  // it's about to run out, so the first tap doesn't wait for it.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && token && Date.now() > token.expires_at - 5 * 60 * 1000) renew().catch(() => {});
+  });
 
   async function login() {
     const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
     const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+    store("aura.pkce", { v: verifier, at: Date.now() });
     sessionStorage.setItem("aura.pkce", verifier);
     location.href = "https://accounts.spotify.com/authorize?" + new URLSearchParams({
       client_id: CLIENT_ID, response_type: "code", redirect_uri: REDIRECT, scope: SCOPES,
@@ -119,12 +144,15 @@
     }
     bump("sent");
     let r;
+    const send = async (fresh) => fetch(`${API}${path}${qs ? "?" + qs : ""}`, {
+      method,
+      headers: { Authorization: `Bearer ${await accessToken({ fresh })}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
     try {
-      r = await fetch(`${API}${path}${qs ? "?" + qs : ""}`, {
-        method,
-        headers: { Authorization: `Bearer ${await accessToken()}`, ...(body ? { "Content-Type": "application/json" } : {}) },
-        body: body ? JSON.stringify(body) : undefined,
-      });
+      r = await send(false);
+      // the access ran out early (phone asleep, clock off): renew once and try again
+      if (r.status === 401) r = await send(true);
     } catch (e) { if (fallback !== undefined) return fallback; throw e; } // offline: show the saved copy
     if (r.status === 429) {
       const wait = +r.headers.get("retry-after") || 30;
