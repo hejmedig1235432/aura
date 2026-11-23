@@ -537,6 +537,9 @@ body.karaoke .lyrics p.active .tr { -webkit-text-fill-color: rgba(255,255,255,.7
 .saver-viz { position: absolute; left: 6vw; right: 6vw; bottom: 4vh; width: 88vw; height: 10vh; opacity: .55; }
 .saver-clock { position: absolute; top: 4vh; right: 5vw; font-size: 4vh; font-weight: 300; color: rgba(255,255,255,.75); }
 
+/* tab bar: only the website shows it, on phones (see web/web.css) */
+.tabbar { display: none; }
+
 /* ---------- welcome screen ---------- */
 #welcome {
   position: fixed; inset: 0; z-index: 90; overflow: hidden; cursor: pointer;

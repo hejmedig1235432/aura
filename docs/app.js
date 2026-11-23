@@ -260,7 +260,10 @@ function syncNavButtons() {
 }
 // Bind on pointerdown as well as click: the title bar is a window-drag region, and on some
 // setups the click never arrives for buttons inside it.
-for (const [id, fn] of [["nav-back", goBack], ["nav-fwd", goForward], ["toggle-side", () => $("app").classList.toggle("no-side")]]) {
+// On a phone (the website added to the home screen) the menu slides over the page instead.
+const isPhone = () => !!window.AURA_WEB && matchMedia("(max-width: 760px)").matches;
+const toggleSide = () => $("app").classList.toggle(isPhone() ? "side-open" : "no-side");
+for (const [id, fn] of [["nav-back", goBack], ["nav-fwd", goForward], ["toggle-side", toggleSide]]) {
   const b = $(id);
   b.onclick = null;
   b.addEventListener("pointerdown", (e) => {
@@ -269,6 +272,31 @@ for (const [id, fn] of [["nav-back", goBack], ["nav-fwd", goForward], ["toggle-s
     fn();
   });
 }
+// Phone: how much of the bottom the player and tab bar take, so the More sheet, popups and
+// lyrics sit right above them on any phone (web.css reads --below).
+function measureBelow() {
+  if (!isPhone()) return;
+  const h = document.querySelector(".player").offsetHeight + $("tabbar").offsetHeight;
+  document.documentElement.style.setProperty("--below", `${h}px`);
+}
+addEventListener("resize", measureBelow);
+new ResizeObserver(measureBelow).observe(document.querySelector(".player"));
+// Phone tab bar: Search jumps to the search box, More opens the full menu (all pages and
+// playlists). Home, Liked and Wrapped are ordinary nav links.
+$("tab-search").onclick = () => { $("app").classList.remove("side-open"); $("search").focus(); };
+$("tab-more").onclick = (e) => { e.stopPropagation(); $("app").classList.toggle("side-open"); };
+// Phone: picking a page or playlist in the slide-over menu, or tapping beside it, closes it;
+// tapping the song in the player opens the full-screen lyrics.
+document.addEventListener("click", (e) => {
+  if (!isPhone()) return;
+  if ($("app").classList.contains("side-open")) {
+    const inSide = e.target.closest("#side");
+    if ((inSide && e.target.closest("[data-view], .pl")) || (!inSide && !e.target.closest("#toggle-side, #tab-more"))) {
+      $("app").classList.remove("side-open");
+    }
+  }
+  if (e.target.closest(".pl-left") && !e.target.closest("button, .artist-link")) showLyrics(true);
+});
 // Mouse side buttons and Alt+arrows navigate too.
 document.addEventListener("mouseup", (e) => { if (e.button === 3) goBack(); if (e.button === 4) goForward(); });
 document.addEventListener("keydown", (e) => {
@@ -503,7 +531,7 @@ async function withDevice(action) {
     await new Promise((r) => setTimeout(r, 600));
     try { return await action(); } catch (e) { if (!isNoDevice(e)) { playbackError(e); return; } }
   }
-  toast("Opening Spotify in the background…");
+  toast(window.AURA_MOBILE ? "Opening the Spotify app… start any song there, then come back to Aura." : "Opening Spotify in the background…");
   await invoke("open_spotify").catch(() => {});
   for (let i = 0; i < 20; i++) {
     await new Promise((r) => setTimeout(r, 1000));
@@ -857,7 +885,8 @@ function enterApp() {
     if (Date.now() - lastPoll >= pollDelay()) { lastPoll = Date.now(); refresh(); }
   }, 1000);
   // On the website the browser plays Spotify itself; the desktop app uses a hidden Edge window.
-  if (window.AURA_WEB) startWebPlayer();
+  // (not on phones: Spotify's web player doesn't run there, music plays in the Spotify app)
+  if (window.AURA_WEB) { if (!window.AURA_MOBILE) startWebPlayer(); }
   else if (S.edgePlayer) startEdgePlayer();
   requestAnimationFrame(tick);
 }

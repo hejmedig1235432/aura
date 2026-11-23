@@ -9,9 +9,136 @@ html.web .row:has([data-seg="material"]),
 html.web .row:has(#check-updates),
 html.web .row:has(#discord-id),
 html.web .row:has([data-set="discord"]),
-html.web .group:has(+ .row [data-set="discord"]) { display: none !important; }
+html.web .group:has(+ .row [data-set="discord"]),
+html.web .group:has(+ .row [data-set="widgetHideIdle"]),
+html.web .row:has([data-set="widgetHideIdle"]),
+html.web .row:has([data-set="widgetHideFullscreen"]) { display: none !important; }
 
 /* a browser page has no transparent window behind it */
 html.web body { background: var(--base); }
 html.web .titlebar { cursor: default; }
 html.web body.material #bg { opacity: 1; }
+
+/* ---------- computers: "get the Windows app" ---------- */
+.get-app {
+  display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px;
+  font-size: 13px; font-weight: 600; color: var(--text); text-decoration: none;
+  background: rgba(255,255,255,.07); border: 1px solid var(--line);
+}
+.get-app:hover { background: rgba(255,255,255,.12); }
+.get-app svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; }
+.titlebar .get-app { padding: 6px 12px; margin-right: 6px; }
+
+/* ---------- iPhone in Safari: how to add Aura to the home screen ---------- */
+.install-hint {
+  position: fixed; z-index: 95; left: 12px; right: 12px; bottom: calc(14px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; border-radius: 16px;
+  background: rgba(24, 27, 38, .97); border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(0,0,0,.55);
+  font-size: 14px; line-height: 1.35; animation: fade .3s ease;
+}
+.install-hint img { width: 44px; height: 44px; border-radius: 11px; flex: none; }
+.install-hint b { display: block; }
+.install-hint span { color: var(--muted); font-size: 13px; }
+.install-hint .share { display: inline-block; vertical-align: -3px; width: 16px; height: 16px; fill: none; stroke: var(--accent2); stroke-width: 2; }
+.install-hint button { margin-left: auto; flex: none; width: 34px; height: 34px; border: 0; border-radius: 10px; background: rgba(255,255,255,.08); color: var(--text); font-size: 15px; }
+
+/* ---------- phones ----------
+   Like a phone app: search and settings on top, the page in one column, a compact player,
+   and tabs along the bottom (More opens every page and playlist). Insets keep clear of the
+   notch and the home bar; touch targets are at least 44px. */
+@media (max-width: 760px) {
+  html.web { touch-action: manipulation; } /* no double-tap zoom */
+  html.web body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+  html.web input { -webkit-user-select: text; user-select: text; }
+  html.web #app, html.web #login { height: 100dvh; padding-top: env(safe-area-inset-top); }
+
+  /* top: search + settings (pages and back/forward live in the tabs and More) */
+  html.web .titlebar { height: 54px; padding: 0 8px 0 12px; gap: 4px; }
+  html.web .titlebar .spacer, html.web #toggle-side, html.web #nav-back, html.web #nav-fwd,
+  html.web #btn-full, html.web #toggle-panel, html.web .searchbox kbd, html.web .titlebar .get-app { display: none; }
+  html.web .searchbox { flex: 1; width: auto; min-width: 0; height: 40px; border-radius: 12px; }
+  html.web .searchbox input { font-size: 16px; } /* 16px+ stops iPhone zooming in on focus */
+  html.web #btn-settings { width: 44px; height: 44px; }
+
+  /* one column */
+  html.web .layout, html.web #app.no-side .layout, html.web #app.no-panel .layout, html.web #app.no-side.no-panel .layout {
+    grid-template-columns: minmax(0, 1fr); padding: 0 6px 6px; gap: 0;
+  }
+  html.web #panel, html.web #side { display: none; }
+  html.web #view { -webkit-overflow-scrolling: touch; }
+
+  /* More: every page and playlist in a sheet above the player */
+  html.web #app.side-open #side {
+    display: flex; position: fixed; z-index: 40; left: 8px; right: 8px;
+    bottom: calc(var(--below, 200px) + 8px); max-height: calc(100dvh - 250px - env(safe-area-inset-top));
+    background: rgba(18, 20, 28, .98); box-shadow: 0 24px 70px rgba(0,0,0,.65); animation: pop .18s ease;
+  }
+  html.web #side nav a { min-height: 44px; }
+  html.web #side .pl { min-height: 48px; }
+
+  /* pages */
+  html.web .view-head { padding: 16px 12px 12px; }
+  html.web .view-head h1 { font-size: 26px; margin-bottom: 12px; }
+  html.web .sub-head { padding-left: 12px; padding-right: 12px; }
+  html.web .grid { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; padding: 0 10px 18px; }
+  html.web .tile { padding: 10px; }
+  html.web .tracks { width: calc(100% - 8px); margin: 0 4px 12px; }
+  html.web .tracks th:nth-child(3), html.web .tracks .album-cell, html.web .tracks .plays-col { display: none; }
+  html.web .tracks th:first-child, html.web .tracks td:first-child { width: 34px; }
+  html.web .tracks th:last-child, html.web .tracks td:last-child { width: 52px; }
+  html.web .tracks td { padding-top: 9px; padding-bottom: 9px; }
+  html.web .stat-cards { grid-template-columns: repeat(2, 1fr); padding: 0 12px 8px; }
+  html.web .clock { overflow-x: auto; min-width: 0; } /* the 24-hour listening clock scrolls sideways */
+  html.web .wrapped-cols { grid-template-columns: 1fr; }
+
+  /* player: song + lyrics/devices on top, controls and progress underneath */
+  html.web .player {
+    height: auto; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "left right" "center center";
+    gap: 6px 8px; padding: 10px 14px 8px; border-top: 1px solid var(--line);
+  }
+  html.web .pl-left { grid-area: left; gap: 10px; cursor: pointer; }
+  html.web .pl-left img { width: 46px; height: 46px; }
+  html.web .pl-center { grid-area: center; }
+  html.web .pl-right { grid-area: right; gap: 0; }
+  html.web .pl-right > :not(#btn-lyrics):not(.pop-wrap:has(#btn-devices)) { display: none; }
+  html.web .pl-right .ic, html.web .pl-left #like { width: 44px; height: 44px; }
+  html.web .buttons { gap: 20px; }
+  html.web .buttons .ic { width: 44px; height: 44px; }
+  html.web .ic.play { width: 50px; height: 50px; }
+  html.web .track-bar { height: 5px; }
+  html.web .player .popover { position: fixed; left: 8px; right: 8px; bottom: calc(var(--below, 200px) + 8px); top: auto; width: auto; max-height: 50dvh; overflow-y: auto; }
+
+  /* tabs along the bottom */
+  html.web .tabbar {
+    display: flex; flex-direction: row; gap: 0; border-bottom: 0; /* not the sidebar's vertical nav */
+    flex: none; justify-content: space-around; align-items: stretch;
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+    background: rgba(12, 14, 20, .92); backdrop-filter: blur(var(--blur)); border-top: 1px solid var(--line);
+  }
+  html.web .tabbar a, html.web .tabbar button {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: 50px; padding: 0; border-radius: 0; background: none !important; border: 0; color: var(--muted);
+    font: inherit; font-size: 10.5px; font-weight: 600; text-decoration: none; cursor: pointer;
+  }
+  html.web .tabbar svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+  html.web .tabbar a.active, html.web #app.side-open #tab-more { color: var(--text); }
+  html.web .tabbar a.active svg { stroke: var(--accent); }
+
+  /* full-screen lyrics fit between the search bar and the player */
+  html.web #lyrics-view { top: calc(54px + env(safe-area-inset-top)); bottom: calc(var(--below, 200px) + 8px); padding: 0 18px; }
+
+  /* settings fill the screen */
+  html.web .settings { width: calc(100vw - 16px); max-height: calc(100dvh - 32px - env(safe-area-inset-top)); }
+  html.web .row { flex-wrap: wrap; }
+
+  /* no hover on touch screens */
+  html.web .tracks tr.trow:hover td { background: none; }
+  html.web .tracks tr.trow:hover .num span { display: inline; }
+  html.web .tracks tr.trow:hover .num::before { content: none; }
+  html.web .tile:hover { background: rgba(255,255,255,.04); }
+  html.web .tile:active, html.web .tracks tr.trow:active td { background: var(--hover); }
+
+  /* the login screen */
+  html.web .login-body h1 { font-size: 44px; }
+  html.web .login-body .get-app { display: none; }
+}

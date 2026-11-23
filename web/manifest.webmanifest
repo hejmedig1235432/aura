@@ -1,0 +1,14 @@
+{
+  "name": "Aura",
+  "short_name": "Aura",
+  "description": "Aura: a Spotify client with lyrics, stats and a glassy look.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0e1118",
+  "theme_color": "#0e1118",
+  "icons": [
+    { "src": "logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

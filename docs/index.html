@@ -2,10 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="logo.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Aura" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0e1118" />
   <title>Aura</title>
-  <link rel="stylesheet" href="style.css?v=20261123200800" />
-  <link rel="stylesheet" href="web.css?v=20261123200800" />
+  <link rel="stylesheet" href="style.css?v=20261123201931" />
+  <link rel="stylesheet" href="web.css?v=20261123201931" />
   <link rel="icon" href="logo.png" />
   <meta name="description" content="Aura: a Spotify client with lyrics, stats and a glassy look." />
 </head>
@@ -163,6 +170,15 @@
         <input type="range" id="volume" min="0" max="100" />
       </div>
     </footer>
+
+    <!-- phones (website): tabs along the bottom, like a phone app; hidden on computers -->
+    <nav class="tabbar" id="tabbar">
+      <a data-view="home"><svg><use href="#i-home"/></svg><span>Home</span></a>
+      <button id="tab-search"><svg><use href="#i-search"/></svg><span>Search</span></button>
+      <a data-view="liked"><svg><use href="#i-heart"/></svg><span>Liked</span></a>
+      <a data-view="wrapped"><svg><use href="#i-gift"/></svg><span>Wrapped</span></a>
+      <button id="tab-more"><svg><use href="#i-dots"/></svg><span>More</span></button>
+    </nav>
 
     <p id="toast" class="toast hidden"></p>
 
@@ -335,7 +351,7 @@
     <canvas id="saver-viz" class="saver-viz"></canvas>
   </div>
 
-  <script src="web.js?v=20261123200800"></script>
-  <script src="app.js?v=20261123200800"></script>
+  <script src="web.js?v=20261123201931"></script>
+  <script src="app.js?v=20261123201931"></script>
 </body>
 </html>

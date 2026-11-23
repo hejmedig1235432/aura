@@ -22,6 +22,13 @@
 
   window.AURA_WEB = true;
   document.documentElement.classList.add("web");
+  // iPhone, iPad (which says it's a Mac but has a touch screen) and Android phones
+  const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  window.AURA_MOBILE = IOS || /Android/i.test(navigator.userAgent);
+  // opened from the home screen (not in a browser tab)
+  const INSTALLED = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+  document.documentElement.classList.toggle("installed", INSTALLED);
+  const RELEASES = "https://github.com/hejmedig1235432/aura/releases/latest";
 
   /* ---------- small storage helpers ---------- */
   const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
@@ -319,6 +326,44 @@
     "toggle_widget", "show_overlay", "set_song_wallpaper", "restore_wallpaper", "toggle_desk", "desk_hot", "install_update", "start_player"]) {
     commands[c] = () => null;
   }
+  /* ---------- by device: install help on iPhone, the Windows app on computers ---------- */
+  function deviceExtras() {
+    // iPhone/iPad in Safari: explain how to add Aura to the home screen (until closed once)
+    if (IOS && !INSTALLED && !load("aura.web.hintClosed", false)) {
+      const d = document.createElement("div");
+      d.className = "install-hint";
+      d.innerHTML = `<img src="logo.png" alt=""><div><b>Add Aura to your home screen</b>
+        <span>Tap <svg class="share" viewBox="0 0 24 24"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 11v9h14v-9"/></svg> Share, then “Add to Home Screen”.</span></div>
+        <button aria-label="Close">✕</button>`;
+      d.querySelector("button").onclick = () => { d.remove(); store("aura.web.hintClosed", true); };
+      document.body.appendChild(d);
+    }
+    // Windows computers: offer the desktop app (widget, hotkeys, wallpaper, built-in player)
+    if (!window.AURA_MOBILE && /Windows/.test(navigator.userAgent)) {
+      const link = (title) => {
+        const a = document.createElement("a");
+        a.className = "get-app"; a.href = RELEASES; a.target = "_blank"; a.rel = "noopener"; a.title = title;
+        a.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Get the Windows app`;
+        return a;
+      };
+      document.querySelector(".login-body")?.appendChild(link("Download Aura for Windows"));
+      document.querySelector("#app .titlebar #btn-settings")?.before(link("Aura for Windows: desktop widget, hotkeys, song wallpaper and more"));
+      // link straight to the newest installer once GitHub says which file it is
+      fetch("https://api.github.com/repos/hejmedig1235432/aura/releases/latest")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          const url = j?.assets?.find((a) => /setup\.exe$/i.test(a.name))?.browser_download_url;
+          if (url) document.querySelectorAll(".get-app").forEach((a) => { a.href = url; a.removeAttribute("target"); });
+        })
+        .catch(() => {});
+    }
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", deviceExtras);
+  else deviceExtras();
+
+  // On a phone the music plays in the Spotify app (Spotify's web player doesn't run in phone
+  // browsers), so "open Spotify" opens the app; Aura then controls it like any Spotify device.
+  if (window.AURA_MOBILE) commands.open_spotify = () => { location.href = "spotify:"; return null; };
 
   async function invoke(cmd, args = {}) {
     const fn = commands[cmd];
