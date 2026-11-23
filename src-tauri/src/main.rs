@@ -772,6 +772,25 @@ async fn toggle_widget(app: tauri::AppHandle, show: bool) -> Res {
     Ok(json!(true))
 }
 
+/// While Aura's window is minimized, WebView2 is asked to keep less in memory (it drops caches
+/// and decoded pictures it can rebuild); back to normal when the window shows again.
+#[tauri::command]
+fn low_memory(window: WebviewWindow, on: bool) {
+    #[cfg(target_os = "windows")]
+    let _ = window.with_webview(move |wv| unsafe {
+        use webview2_com::Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+        };
+        use windows_core::Interface;
+        if let Ok(core) = wv.controller().CoreWebView2() {
+            if let Ok(c19) = core.cast::<ICoreWebView2_19>() {
+                let level = if on { COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW } else { COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL };
+                let _ = c19.SetMemoryUsageTargetLevel(level);
+            }
+        }
+    });
+}
+
 /// Auto-hide: while the widget is faded out, clicks go straight through it to the app below.
 /// The window itself stays open. Hiding it behind Tauri's back made Tauri hide it for real
 /// the next time the pin changed the window's style.
@@ -1015,6 +1034,14 @@ fn main() {
                     log::info!("aura: hotkey {s:?} is taken by another app: {e}");
                 }
             }
+            // twice a second: keeps the widget, lyrics and Up next going while the main window
+            // is minimized and its animation frames stop (see tickOnce in app.js)
+            let handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                use tauri::Emitter;
+                let _ = handle.emit_to("main", "aura-tick", ());
+            });
             Ok(())
         })
         .manage(App {
@@ -1032,7 +1059,7 @@ fn main() {
             shuffle, repeat, search, play_uris, play_playlist, add_queue, playlists, library, queue, is_liked, set_liked,
             lyrics, set_material, set_autostart, open_spotify, sign_out, web_token, report, start_edge_player,
             sync_plays, play_counts, top_items, discord_set, discord_clear,
-            index_lyrics, lyrics_search, translate, play_history, toggle_widget, widget_visible, foreground_fullscreen,
+            index_lyrics, lyrics_search, translate, play_history, toggle_widget, widget_visible, foreground_fullscreen, low_memory,
             artist, album, play_context, hotkeys::show_overlay,
             updates::check_update, updates::install_update,
             wallpaper::set_song_wallpaper, wallpaper::restore_wallpaper,

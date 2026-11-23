@@ -334,7 +334,7 @@ function followedPlaylistView(el, view) {
       <div class="view-actions"><button class="big-play" id="play-all">${icon("play")}</button></div>
     </div>
     <div class="followed">
-      ${p?.images?.[0]?.url ? `<img src="${esc(p.images[0].url)}" alt="">` : ""}
+      ${p?.images?.length ? `<img src="${esc(imgOf(p.images))}" alt="">` : ""}
       <p>Spotify only lets apps show the songs in playlists you own. You can still play this one: press play and the songs will show up in the player and the queue.</p>
     </div>`;
   $("play-all").onclick = () => withDevice(() => invoke("play_playlist", { id: view.id })).then(() => setTimeout(refresh, 600));
@@ -371,7 +371,7 @@ async function renderHome(el) {
     <h3 class="sub-head">Jump back in</h3><div class="grid" data-list="r">${r.map(tile).join("")}</div>
     <h3 class="sub-head">On repeat</h3><div class="grid" data-list="t">${tp.map(tile).join("")}</div>
     <h3 class="sub-head">Your playlists</h3><div class="grid" id="home-pl">${playlistCache.map((p) =>
-      `<div class="tile" data-pl="${esc(p.id)}"><img src="${esc(p.images?.[0]?.url ?? "")}"><b>${esc(p.name)}</b><span>${esc(p.owner?.display_name ?? "")}</span></div>`).join("")}</div>`;
+      `<div class="tile" data-pl="${esc(p.id)}"><img src="${esc(imgOf(p.images))}" loading="lazy"><b>${esc(p.name)}</b><span>${esc(p.owner?.display_name ?? "")}</span></div>`).join("")}</div>`;
   el.querySelectorAll("[data-list]").forEach((g) => {
     const list = g.dataset.list === "r" ? r : tp;
     g.onclick = (e) => {
@@ -403,7 +403,7 @@ function trackView(el, eyebrow, title, tracks) {
       <tbody>${tracks.map((t, i) => `
         <tr class="trow" data-uri="${esc(trackUri(t))}" data-name="${esc((t.name + " " + artists(t) + " " + (t.album?.name ?? "")).toLowerCase())}">
           <td class="num"><span>${i + 1}</span></td>
-          <td class="title"><div class="t-cell"><img src="${esc(t.album?.images?.at(-1)?.url ?? "")}"><div>
+          <td class="title"><div class="t-cell"><img src="${esc(t.album?.images?.at(-1)?.url ?? "")}" loading="lazy"><div>
             <b>${t.explicit ? '<span class="explicit">E</span>' : ""}${esc(t.name)}</b><span>${artistLinks(t)}</span></div></div></td>
           <td class="album-cell">${esc(t.album?.name ?? "")}</td>
           <td class="plays-col muted">${playsOf(trackUri(t)) || ""}</td>
@@ -544,7 +544,7 @@ async function loadSidebar() {
   me = await invoke("me").catch(() => null);
   if (me) {
     $("username").textContent = me.display_name ?? me.id;
-    $("avatar").src = me.images?.[0]?.url ?? "";
+    $("avatar").src = me.images?.at(-1)?.url ?? ""; // smallest: it's shown tiny
     // `product` is no longer returned for new development-mode apps (Feb 2026)
     $("acct-info").textContent = [me.display_name ?? me.id, me.product].filter(Boolean).join(" · ");
   }
@@ -648,8 +648,15 @@ function onTrackChange(t) {
   loadLyrics(t);
 }
 
-/** Smooth progress between polls. */
+/** Smooth progress between polls: every frame while the window shows. */
 function tick() {
+  tickOnce();
+  requestAnimationFrame(tick);
+}
+/** One step of progress, lyrics, widget updates, fades and Up next. Animation frames stop while
+ *  the window is minimized, so then Aura's backend ticks it instead (twice a second); otherwise
+ *  the widget froze and Up next didn't move on while Aura was minimized. */
+function tickOnce() {
   const pos = Math.min(current.dur, current.pos + (current.playing ? performance.now() - current.at : 0));
   const pct = current.dur ? (pos / current.dur) * 100 : 0;
   $$("[data-bar]").forEach((b) => (b.style.width = `${pct}%`));
@@ -658,7 +665,6 @@ function tick() {
   // Aura's position estimate trails the audio a little (network delay), so lyrics run early.
   syncLyrics(pos + (S.lyricsOffset ?? 400));
   tickExtras(pos);
-  requestAnimationFrame(tick);
 }
 
 function togglePlay() {
@@ -1599,6 +1605,14 @@ listen("aura-widget-action", (e) => {
 if (S.widget) setTimeout(() => setWidget(true), 3000);
 if (S.songWallpaper) setTimeout(() => invoke("toggle_desk", { show: true }).catch(() => {}), 3000);
 
+/* ================= while minimized ================= */
+// Keep playback extras going without animation frames (see tickOnce), and ask WebView2 to
+// use less memory while the window can't be seen; back to normal when it shows again.
+listen("aura-tick", () => { if (document.hidden && !$("app").classList.contains("hidden")) tickOnce(); });
+document.addEventListener("visibilitychange", () => {
+  invoke("low_memory", { on: document.hidden }).catch(() => {});
+});
+
 // keep the widget in step with lyrics and play/pause
 let widgetLine = -2, widgetPlaying = null;
 const tickExtrasBase = tickExtras;
@@ -1661,7 +1675,8 @@ listen("edge-player", async ({ payload }) => {
 
 /* ================= artists and albums ================= */
 
-const imgOf = (images, i = 1) => images?.[i]?.url ?? images?.[0]?.url ?? "";
+/** A cover of about 300 px (Spotify sends 640, 300 and 64), not the full 640: big pictures cost memory. */
+function imgOf(images, i = 1) { return images?.[i]?.url ?? images?.[0]?.url ?? ""; }
 const yearOf = (a) => (a.release_date || "").slice(0, 4);
 
 function artistTile(a) {
