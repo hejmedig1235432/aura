@@ -101,6 +101,23 @@ async fn spotify(app: &App) -> AuthCodePkceSpotify {
 
 /// Current access token, renewed first if it has expired.
 ///
+/// Set at startup so code without the app at hand (like access_token) can tell the window things.
+static HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+static SIGN_IN_LOST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The saved sign-in can't be renewed any more: tell the window (once) to show the sign-in
+/// screen. Before this, Aura quietly carried on with its offline copies and nothing fresh worked
+/// (play history stopped saving for weeks without anyone noticing).
+fn sign_in_lost(why: &str) {
+    if !SIGN_IN_LOST.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        log::info!("aura: sign-in lost: {why}");
+        if let Some(h) = HANDLE.get() {
+            use tauri::Emitter;
+            let _ = h.emit_to("main", "aura-signed-out", why.to_string());
+        }
+    }
+}
+
 /// Aura renews the sign-in itself instead of using rspotify's refresh_token(): that one holds
 /// the token lock while waiting for it again and hangs forever, which left every request
 /// stuck on "Loading…" an hour after signing in. Renewals are one at a time and time-limited,
@@ -119,7 +136,10 @@ async fn access_token(sp: &AuthCodePkceSpotify) -> Result<String, String> {
             return Ok(t.access_token);
         }
     }
-    let refresh = token.refresh_token.clone().ok_or("sign-in expired: please connect Spotify again")?;
+    let Some(refresh) = token.refresh_token.clone().filter(|r| !r.is_empty()) else {
+        sign_in_lost("the saved sign-in has no refresh token");
+        return Err("sign-in expired: please connect Spotify again".into());
+    };
     let r = reqwest::Client::new()
         .post("https://accounts.spotify.com/api/token")
         .form(&[("grant_type", "refresh_token"), ("refresh_token", refresh.as_str()), ("client_id", sp.get_creds().id.as_str())])
@@ -131,6 +151,11 @@ async fn access_token(sp: &AuthCodePkceSpotify) -> Result<String, String> {
     let body: Value = r.json().await.map_err(err)?;
     if !status.is_success() {
         log::info!("aura: renewing the sign-in failed: {status} {body}");
+        // 400/401 mean Spotify refused the refresh token for good (revoked, replaced, expired);
+        // anything else (5xx) may pass, so keep going on the offline copies until then
+        if status == reqwest::StatusCode::BAD_REQUEST || status == reqwest::StatusCode::UNAUTHORIZED {
+            sign_in_lost(&format!("Spotify refused to renew it ({status})"));
+        }
         return Err(format!("sign-in expired: please connect Spotify again ({status})"));
     }
     let secs = body["expires_in"].as_i64().unwrap_or(3600);
@@ -307,6 +332,10 @@ async fn login(app: State<'_, App>) -> Res {
         let redirected = waiter.await.map_err(err)??;
         let code = sp.parse_response_code(&redirected).ok_or("no code in callback")?;
         sp.request_token(&code).await.map_err(err)?;
+        let has_refresh = sp.get_token().lock().await.unwrap().as_ref().and_then(|t| t.refresh_token.as_ref()).is_some_and(|r| !r.is_empty());
+        // without a refresh token the sign-in stops working after an hour
+        log::info!("aura: signed in to Spotify (refresh token: {})", if has_refresh { "yes" } else { "NO" });
+        SIGN_IN_LOST.store(false, std::sync::atomic::Ordering::Relaxed);
     }
     match get(&app, "/me", &[]).await {
         // signed in fine; Spotify is only rate-limiting, so don't fail the sign-in
@@ -1039,6 +1068,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updates::Pending::default())
         .setup(|app| {
+            let _ = HANDLE.set(app.handle().clone());
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
             for s in hotkeys::shortcuts() {
                 if let Err(e) = app.global_shortcut().register(s) {

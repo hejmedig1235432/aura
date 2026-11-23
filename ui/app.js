@@ -834,9 +834,18 @@ async function showWelcome(profileLoaded) {
   close();
 }
 
+let entered = false;
 function enterApp() {
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
+  // signed in again after the sign-in was lost: everything below is already running
+  if (entered) {
+    $("login-msg").textContent = "";
+    loadSidebar().then(() => go({ kind: "home" }));
+    refresh();
+    return;
+  }
+  entered = true;
   const profileLoaded = loadSidebar();
   showWelcome(profileLoaded);
   profileLoaded.then(() => go({ kind: "home" }));
@@ -1604,6 +1613,16 @@ listen("aura-widget-action", (e) => {
 });
 if (S.widget) setTimeout(() => setWidget(true), 3000);
 if (S.songWallpaper) setTimeout(() => invoke("toggle_desk", { show: true }).catch(() => {}), 3000);
+
+/* ================= sign-in lost ================= */
+// The saved Spotify sign-in can't be renewed any more. Show the sign-in screen and say why,
+// instead of carrying on quietly with offline copies (nothing fresh would load or save).
+listen("aura-signed-out", () => {
+  $("mini").classList.add("hidden");
+  $("app").classList.add("hidden");
+  $("login").classList.remove("hidden");
+  $("login-msg").textContent = "Your Spotify sign-in has expired. Connect again to keep your music, history and stats up to date.";
+});
 
 /* ================= while minimized ================= */
 // Keep playback extras going without animation frames (see tickOnce), and ask WebView2 to
