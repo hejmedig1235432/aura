@@ -772,23 +772,34 @@ async fn toggle_widget(app: tauri::AppHandle, show: bool) -> Res {
     Ok(json!(true))
 }
 
-/// While Aura's window is minimized, WebView2 is asked to keep less in memory (it drops caches
-/// and decoded pictures it can rebuild); back to normal when the window shows again.
-#[tauri::command]
-fn low_memory(window: WebviewWindow, on: bool) {
+/// While Aura's window is minimized, WebView2 is told the page can't be seen (so it stops
+/// drawing and frees graphics memory) and to keep less in memory (it drops caches and pictures
+/// it can rebuild). Both go back to normal when the window shows again.
+///
+/// This has to come from here: WebView2 inside Tauri never tells the page it was minimized
+/// (document.hidden stays false), so the page can't ask for it itself.
+fn webview_low_memory(window: &WebviewWindow, on: bool) {
     #[cfg(target_os = "windows")]
     let _ = window.with_webview(move |wv| unsafe {
         use webview2_com::Microsoft::Web::WebView2::Win32::{
             ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
         };
         use windows_core::Interface;
-        if let Ok(core) = wv.controller().CoreWebView2() {
+        let controller = wv.controller();
+        let _ = controller.SetIsVisible(!on);
+        if let Ok(core) = controller.CoreWebView2() {
             if let Ok(c19) = core.cast::<ICoreWebView2_19>() {
                 let level = if on { COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW } else { COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL };
                 let _ = c19.SetMemoryUsageTargetLevel(level);
             }
         }
     });
+    log::info!("aura: low-memory mode {}", if on { "on (minimized)" } else { "off" });
+}
+
+#[tauri::command]
+fn low_memory(window: WebviewWindow, on: bool) {
+    webview_low_memory(&window, on);
 }
 
 /// Auto-hide: while the widget is faded out, clicks go straight through it to the app below.
@@ -1073,6 +1084,18 @@ fn main() {
             if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } = &event {
                 if label == "main" {
                     app.exit(0);
+                }
+            }
+            // minimizing or restoring the main window resizes it: switch low-memory mode to match
+            if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Resized(_), .. } = &event {
+                if label == "main" {
+                    static MINIMIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                    if let Some(w) = app.get_webview_window("main") {
+                        let min = w.is_minimized().unwrap_or(false);
+                        if MINIMIZED.swap(min, std::sync::atomic::Ordering::Relaxed) != min {
+                            webview_low_memory(&w, min);
+                        }
+                    }
                 }
             }
             if let tauri::RunEvent::Exit = event {
