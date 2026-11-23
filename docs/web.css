@@ -141,4 +141,52 @@ html.web body.material #bg { opacity: 1; }
   /* the login screen */
   html.web .login-body h1 { font-size: 44px; }
   html.web .login-body .get-app { display: none; }
+
+  /* back arrow at the top whenever there's a page to go back to (no browser back button
+     in a home-screen app) */
+  html.web #nav-back { display: grid; width: 40px; height: 44px; }
+  html.web #nav-back.disabled { display: none; }
+
+  /* no iPhone "copy / look up" bubble when you long-press a song for its menu */
+  html.web body { -webkit-touch-callout: none; }
+  html.web .ctx { min-width: 220px; }
+  html.web .ctx button { min-height: 44px; font-size: 15px; }
+
+  /* ---------- full-screen Now Playing ---------- */
+  html.web #np-sheet:not(.hidden) {
+    display: flex; flex-direction: column; position: fixed; inset: 0; z-index: 60; overflow: hidden;
+    padding: calc(8px + env(safe-area-inset-top)) 24px calc(20px + env(safe-area-inset-bottom));
+    background: var(--base); animation: sheet-up .28s cubic-bezier(.2, .8, .2, 1);
+    transition: transform .2s ease; touch-action: pan-x;
+  }
+  html.web #np-sheet.closing { transform: translateY(100%) !important; }
+  @keyframes sheet-up { from { transform: translateY(100%); } }
+  html.web .sheet-bg {
+    position: absolute; inset: -15%; z-index: -1; background-size: cover; background-position: center;
+    filter: blur(70px) brightness(.45) saturate(1.5);
+  }
+  html.web .sheet-top { display: flex; align-items: center; justify-content: space-between; height: 48px; }
+  html.web .sheet-top span { font-size: 11px; font-weight: 800; letter-spacing: 1.6px; color: rgba(255,255,255,.7); }
+  html.web .sheet-top .ic { width: 44px; height: 44px; }
+  html.web #sheet-cover {
+    width: min(100%, 52dvh); aspect-ratio: 1; object-fit: cover; align-self: center; margin: auto 0 0;
+    border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.55); background: rgba(255,255,255,.06);
+  }
+  html.web .sheet-meta { display: flex; align-items: center; gap: 12px; margin: 26px 0 14px; }
+  html.web .sheet-meta > div { flex: 1; min-width: 0; }
+  html.web .sheet-meta h2 { font-size: 22px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html.web .sheet-meta p { font-size: 16px; color: rgba(255,255,255,.7); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html.web #sheet-like { width: 48px; height: 48px; }
+  html.web #sheet-like svg { width: 26px; height: 26px; }
+  html.web #sheet-like.liked svg { fill: var(--accent); stroke: var(--accent); }
+  html.web #np-sheet .seek { font-size: 12px; }
+  html.web #np-sheet .track-bar { height: 6px; }
+  html.web .sheet-buttons { justify-content: space-between; margin: 18px 0 auto; gap: 0; }
+  html.web .sheet-buttons .ic { width: 52px; height: 52px; }
+  html.web .sheet-buttons .ic svg { width: 26px; height: 26px; }
+  html.web .sheet-buttons .ic.play { width: 70px; height: 70px; }
+  html.web .sheet-buttons .ic.play svg { width: 30px; height: 30px; }
+  html.web .sheet-extras { display: flex; justify-content: center; gap: 10px; margin-top: 22px; }
+  html.web .sheet-extras .pill { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; }
+  html.web .sheet-extras svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
 }

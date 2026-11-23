@@ -295,8 +295,105 @@ document.addEventListener("click", (e) => {
       $("app").classList.remove("side-open");
     }
   }
-  if (e.target.closest(".pl-left") && !e.target.closest("button, .artist-link")) showLyrics(true);
+  if (e.target.closest(".pl-left") && !e.target.closest("button, .artist-link")) openSheet();
 });
+
+/* ---------- phone: full-screen Now Playing ---------- */
+// Big cover, title, like, progress, controls, shuffle/repeat, lyrics and devices. The play,
+// skip and progress controls are the ordinary ones (data-toggle/data-act/data-seek), so they
+// just work; the rest mirrors the player bar while the sheet is open.
+const sheetOpen = () => !$("np-sheet").classList.contains("hidden");
+function syncSheet() {
+  if (!sheetOpen()) return;
+  $("sheet-title").textContent = $("pb-title").textContent;
+  $("sheet-artist").textContent = $("pb-artist").textContent;
+  if (current.cover && $("sheet-cover").src !== current.cover) {
+    $("sheet-cover").src = current.cover;
+    $("sheet-bg").style.backgroundImage = `url("${current.cover}")`;
+  }
+  $("sheet-like").classList.toggle("liked", $("like").classList.contains("liked"));
+  $("sheet-shuffle").classList.toggle("on", $("shuffle").classList.contains("on"));
+  $("sheet-repeat").classList.toggle("on", $("repeat").classList.contains("on"));
+  $("sheet-repeat").querySelector("i").textContent = $("repeat").querySelector("i").textContent;
+}
+function openSheet() {
+  $("np-sheet").classList.remove("hidden", "closing");
+  $("np-sheet").style.transform = "";
+  syncSheet();
+  updateWakeLock();
+}
+function closeSheet() {
+  if (!sheetOpen()) return;
+  $("np-sheet").classList.add("closing");
+  setTimeout(() => { $("np-sheet").classList.add("hidden"); $("np-sheet").classList.remove("closing"); $("np-sheet").style.transform = ""; updateWakeLock(); }, 220);
+}
+// follow the player bar (new song, like, shuffle, repeat) while the sheet is open
+new MutationObserver(syncSheet).observe(document.querySelector(".player"), { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["class"] });
+$("sheet-close").onclick = closeSheet;
+$("sheet-like").onclick = () => $("like").click();
+$("sheet-shuffle").onclick = () => $("shuffle").click();
+$("sheet-repeat").onclick = () => $("repeat").click();
+$("sheet-queue").onclick = () => { closeSheet(); go({ kind: "queue" }); };
+$("sheet-lyrics").onclick = () => { closeSheet(); showLyrics(true); };
+$("sheet-devices").onclick = () => { closeSheet(); setTimeout(() => $("btn-devices").click(), 240); };
+
+/* ---------- phone: swipes ---------- */
+// Now Playing: swipe down to close. Player bar: swipe left/right to skip, up to open Now Playing.
+function onSwipe(el, handler, { follow = false } = {}) {
+  let x0 = 0, y0 = 0, t0 = 0, active = false;
+  el.addEventListener("touchstart", (e) => {
+    if (e.target.closest("[data-seek], input")) return; // dragging the progress bar isn't a swipe
+    const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); active = true;
+  }, { passive: true });
+  el.addEventListener("touchmove", (e) => {
+    if (!active || !follow) return;
+    const dy = e.touches[0].clientY - y0;
+    if (dy > 0) el.style.transform = `translateY(${dy}px)`; // the sheet follows your finger down
+  }, { passive: true });
+  el.addEventListener("touchend", (e) => {
+    if (!active) return;
+    active = false;
+    const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0, fast = Date.now() - t0 < 600;
+    if (!handler(dx, dy, fast) && follow) el.style.transform = "";
+  });
+}
+onSwipe($("np-sheet"), (dx, dy) => { if (dy > 110 && Math.abs(dx) < dy) { closeSheet(); return true; } return false; }, { follow: true });
+onSwipe(document.querySelector(".player"), (dx, dy, fast) => {
+  if (!isPhone() || !fast) return false;
+  if (Math.abs(dx) > 60 && Math.abs(dy) < 40) { skip(dx < 0 ? "next" : "prev"); return true; }
+  if (dy < -50 && Math.abs(dx) < 40) { openSheet(); return true; }
+  return false;
+});
+
+/* ---------- phone: long-press a song for its menu (right-click on a computer) ---------- */
+let pressTimer = null, pressed = false;
+document.addEventListener("touchstart", (e) => {
+  const el = e.target.closest("[data-uri]");
+  if (!el || !isPhone()) return;
+  const t = e.touches[0];
+  pressed = false;
+  clearTimeout(pressTimer);
+  pressTimer = setTimeout(() => { pressed = true; openCtx(el.dataset.uri, t.clientX, t.clientY); }, 500);
+}, { passive: true });
+for (const ev of ["touchmove", "touchend", "touchcancel"]) document.addEventListener(ev, () => clearTimeout(pressTimer), { passive: true });
+// the tap that ends a long-press must not also play the song
+document.addEventListener("click", (e) => { if (pressed) { pressed = false; e.stopPropagation(); e.preventDefault(); } }, true);
+
+/* ---------- phone: keep the screen on while Now Playing or the lyrics are open ---------- */
+let wakeLock = null;
+async function updateWakeLock() {
+  const want = isPhone() && document.visibilityState === "visible" && (sheetOpen() || !$("lyrics-view").classList.contains("hidden"));
+  try {
+    if (want && !wakeLock && navigator.wakeLock) {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => { wakeLock = null; });
+    } else if (!want && wakeLock) {
+      await wakeLock.release();
+      wakeLock = null;
+    }
+  } catch { wakeLock = null; }
+}
+document.addEventListener("visibilitychange", updateWakeLock); // the lock ends when you leave the app
 // Mouse side buttons and Alt+arrows navigate too.
 document.addEventListener("mouseup", (e) => { if (e.button === 3) goBack(); if (e.button === 4) goForward(); });
 document.addEventListener("keydown", (e) => {
@@ -914,6 +1011,7 @@ function showLyrics(on = $("lyrics-view").classList.contains("hidden")) {
   $("lyrics-view").classList.toggle("hidden", !on);
   $("btn-lyrics").classList.toggle("on", on);
   lastLine = -1; // force a scroll to the current line
+  updateWakeLock(); // phones keep the screen on while the lyrics show
 }
 $("btn-lyrics").onclick = () => showLyrics();
 $("lv-close").onclick = () => showLyrics(false);
@@ -958,15 +1056,18 @@ function shortcuts(e) {
 /* right-click menu on any track row or tile */
 let ctxUri = null;
 function hideCtx() { $("ctx").classList.add("hidden"); }
+function openCtx(uri, x, y) {
+  ctxUri = uri;
+  const m = $("ctx");
+  m.classList.remove("hidden");
+  m.style.left = `${Math.max(8, Math.min(x, innerWidth - m.offsetWidth - 8))}px`;
+  m.style.top = `${Math.max(8, Math.min(y, innerHeight - m.offsetHeight - 8))}px`;
+}
 document.addEventListener("contextmenu", (e) => {
   const el = e.target.closest("[data-uri]");
   e.preventDefault();
   if (!el) return hideCtx();
-  ctxUri = el.dataset.uri;
-  const m = $("ctx");
-  m.classList.remove("hidden");
-  m.style.left = `${Math.min(e.clientX, innerWidth - m.offsetWidth - 8)}px`;
-  m.style.top = `${Math.min(e.clientY, innerHeight - m.offsetHeight - 8)}px`;
+  openCtx(el.dataset.uri, e.clientX, e.clientY);
 });
 document.addEventListener("click", (e) => { if (!e.target.closest("#ctx")) hideCtx(); });
 $("ctx").onclick = async (e) => {
