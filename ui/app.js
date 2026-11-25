@@ -421,18 +421,20 @@ async function render(view) {
   }, 25000);
   el.scrollTop = 0;
   try {
-    if (view.kind === "home") return renderHome(el);
-    if (view.kind === "queue") return renderQueue(el);
-    if (view.kind === "stats") return renderStats(el, view.range ?? "short_term");
-    if (view.kind === "history") return renderHistory(el);
-    if (view.kind === "wrapped") return renderWrapped(el, view.range ?? "week");
-    if (view.kind === "artist") return renderArtist(el, view.id);
-    if (view.kind === "album") return renderAlbum(el, view.id);
+    // `await` matters: without it a page's error escaped this try, and you got "Spotify isn't
+    // answering" after 25 s instead of the real reason
+    if (view.kind === "home") return await renderHome(el);
+    if (view.kind === "queue") return await renderQueue(el);
+    if (view.kind === "stats") return await renderStats(el, view.range ?? "short_term");
+    if (view.kind === "history") return await renderHistory(el);
+    if (view.kind === "wrapped") return await renderWrapped(el, view.range ?? "week");
+    if (view.kind === "artist") return await renderArtist(el, view.id);
+    if (view.kind === "album") return await renderAlbum(el, view.id);
     if (view.kind === "search") {
       const r = await invoke("search", { query: view.q });
       trackView(el, "SEARCH", `“${view.q}”`, normalize(r.tracks?.items || []));
       insertArtistsAlbums(el, r);
-      return appendLyricHits(el, view.q);
+      return await appendLyricHits(el, view.q);
     }
     const titles = { liked: ["LIBRARY", "Liked Songs"], recent: ["HISTORY", "Recently Played"], top: ["MADE FOR YOU", "Your Top Tracks"] };
     const [eyebrow, title] = view.kind === "playlist" ? ["PLAYLIST", view.name] : titles[view.kind];
@@ -445,7 +447,10 @@ async function render(view) {
     trackView(el, eyebrow, title, tracks);
   } catch (e) {
     if (String(e).includes("NOT_OWNER")) return followedPlaylistView(el, view);
-    el.innerHTML = `<div class="empty">${esc(e)}</div>`;
+    // Spotify's "bad request" / "not found": say it plainly instead of showing the raw answer
+    const msg = /\b(400|404)\b|invalid id|non existing id/i.test(String(e))
+      ? "Spotify doesn't have a page for this." : String(e);
+    el.innerHTML = `<div class="empty">${esc(msg)}</div>`;
   }
 }
 
@@ -1858,6 +1863,11 @@ function insertArtistsAlbums(el, r) {
 }
 
 async function renderArtist(el, id) {
+  if (!isSpotifyId(id)) {
+    el.innerHTML = `<div class="empty">This artist isn't on Spotify, so there's no artist page.
+      Songs from your own files show “Unknown Artist” or the name saved in the file.</div>`;
+    return;
+  }
   const r = await invoke("artist", { id });
   const a = r.artist;
   const albumsList = (r.albums || []).filter(Boolean);
@@ -1891,10 +1901,13 @@ async function loadArtistSongs(a) {
 }
 
 /** Artist names as links that open the artist's page (several artists: one link each). */
+/** A real Spotify ID: 22 letters and digits. Songs from your own files ("local files") and
+ *  "Unknown Artist" have none, and used to link to an artist page that could never load. */
+const isSpotifyId = (id) => /^[0-9A-Za-z]{22}$/.test(String(id ?? ""));
 function artistLinks(t) {
   return (t.artists ?? []).map((x) => {
     const id = x.id ?? String(x.uri ?? "").split(":").pop();
-    return id ? `<a class="artist-link" data-artist="${esc(id)}">${esc(x.name)}</a>` : esc(x.name);
+    return isSpotifyId(id) ? `<a class="artist-link" data-artist="${esc(id)}">${esc(x.name)}</a>` : esc(x.name);
   }).join(", ");
 }
 
@@ -1909,7 +1922,7 @@ async function renderAlbum(el, id) {
       <img class="hero-img" src="${esc(imgOf(a.images, 0))}">
       <div>
         <div class="eyebrow">${esc((a.album_type || "album").toUpperCase())}</div><h1>${esc(a.name)}</h1>
-        <p class="muted">${(a.artists || []).map((x) => `<a class="link" data-artist="${esc(x.id)}">${esc(x.name)}</a>`).join(", ")}
+        <p class="muted">${(a.artists || []).map((x) => isSpotifyId(x.id) ? `<a class="link" data-artist="${esc(x.id)}">${esc(x.name)}</a>` : esc(x.name)).join(", ")}
           · ${esc(yearOf(a))} · ${tracks.length} songs · ${Math.round(total / 60000)} min</p>
       </div>
     </div>

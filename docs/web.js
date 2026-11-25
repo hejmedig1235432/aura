@@ -291,8 +291,19 @@
     top_items: ({ kind, range }) => get(`/me/top/${kind === "artists" ? "artists" : "tracks"}`, { time_range: range, limit: 50 }),
     artist: async ({ id }) => {
       const info = await get(`/artists/${id}`);
-      const albums = await get(`/artists/${id}/albums`, { include_groups: "album,single", limit: 40 });
-      return { artist: info, albums: albums?.items ?? [] };
+      // Spotify allows at most 10 albums per request (development-mode apps, since Feb 2026);
+      // asking for 40 got the whole artist page refused. Up to 40 in pages of 10; if the
+      // albums fail, still show the artist.
+      let albums = [];
+      for (const offset of [0, 10, 20, 30]) {
+        let page;
+        try { page = await get(`/artists/${id}/albums`, { include_groups: "album,single", limit: 10, offset }); }
+        catch (e) { console.warn("[aura] artist albums failed:", e); break; }
+        const items = page?.items ?? [];
+        albums = albums.concat(items);
+        if (items.length < 10 || !page?.next) break;
+      }
+      return { artist: info, albums };
     },
     album: ({ id }) => get(`/albums/${id}`),
 

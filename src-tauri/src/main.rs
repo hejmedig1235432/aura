@@ -396,8 +396,28 @@ async fn search(app: State<'_, App>, query: String) -> Res {
 #[tauri::command]
 async fn artist(app: State<'_, App>, id: String) -> Res {
     let info = get(&app, &format!("/artists/{id}"), &[]).await?;
-    let albums = get(&app, &format!("/artists/{id}/albums"), &[("include_groups", "album,single"), ("limit", "40")]).await?;
-    Ok(json!({ "artist": info, "albums": albums["items"] }))
+    // Since February 2026 Spotify allows at most 10 albums per request for apps in development
+    // mode; asking for 40 got the whole artist page refused. Fetch up to 40 in pages of 10, and
+    // if the albums fail, still show the artist.
+    let mut albums: Vec<Value> = Vec::new();
+    for offset in ["0", "10", "20", "30"] {
+        let page = get(&app, &format!("/artists/{id}/albums"), &[("include_groups", "album,single"), ("limit", "10"), ("offset", offset)]).await;
+        match page {
+            Ok(page) => {
+                let items = page["items"].as_array().cloned().unwrap_or_default();
+                let full = items.len() == 10 && !page["next"].is_null();
+                albums.extend(items);
+                if !full {
+                    break;
+                }
+            }
+            Err(e) => {
+                log::info!("aura: artist albums failed: {e}");
+                break;
+            }
+        }
+    }
+    Ok(json!({ "artist": info, "albums": albums }))
 }
 
 /// An album with its track list.
